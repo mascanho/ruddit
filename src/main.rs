@@ -1,4 +1,5 @@
 use base64::{engine::general_purpose, Engine as _};
+use chrono::{Duration, Utc};
 use reqwest::Client;
 use serde::Deserialize;
 
@@ -61,7 +62,15 @@ async fn get_access_token(client_id: &str, client_secret: &str) -> Result<String
 // Function to fetch and print posts from a subreddit
 async fn get_subreddit_posts(access_token: &str, subreddit: &str) -> Result<(), RedditError> {
     let client = Client::new();
-    let url = format!("https://oauth.reddit.com/r/{}/new?limit=200", subreddit);
+
+    // Calculate the timestamp for one month ago
+    let one_month_ago = Utc::now() - Duration::days(30);
+    let timestamp = one_month_ago.timestamp();
+
+    let url = format!(
+        "https://oauth.reddit.com/r/{}/new?limit=100&after={}",
+        subreddit, timestamp
+    );
 
     let response = client
         .get(&url)
@@ -79,8 +88,8 @@ async fn get_subreddit_posts(access_token: &str, subreddit: &str) -> Result<(), 
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client_id = "3uxvR7iY8Fe0cKRSTI3pdQ";
-    let client_secret = "8kPXHK9zFmZLB73MlxqNiN6uLmNIhg";
+    let client_id = "YOUR_CLIENT_ID";
+    let client_secret = "YOUR_CLIENT_SECRET";
 
     let token = get_access_token(client_id, client_secret)
         .await
@@ -89,6 +98,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     get_subreddit_posts(&token, "software")
         .await
-        .expect("error");
+        .expect("Failed to get posts");
     Ok(())
 }
