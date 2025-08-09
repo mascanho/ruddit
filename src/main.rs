@@ -1,3 +1,6 @@
+// REDIT_CLIENT_ID=3uxvR7iY8Fe0cKRSTI3pdQ
+//EDIT_CLIENT_SECRET=8kPXHK9zFmZLB73MlxqNiN6uLmNIhg
+
 use base64::{engine::general_purpose, Engine as _};
 use chrono::{Duration, Utc};
 use reqwest::Client;
