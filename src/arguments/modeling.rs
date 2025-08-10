@@ -1,5 +1,7 @@
 use clap::Parser;
 
+//TODO: implement token input with clap
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Args {
