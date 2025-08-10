@@ -1,13 +1,18 @@
 [package]
-name = "reddit"
+name = "ruddit"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 base64 = "0.22.1"
-reqwest = { version = "0.11.12", features = ["json"] }
+reqwest = { version = "0.12.22", features = ["json"] }
 serde = { version = "1.0.145", features = ["derive"] }
 tokio = { version = "1.21.2", features = ["full"] }
 serde_json = "1.0.85"
 chrono = "0.4.41"
 dotenv = "0.15.0"
+directories = "6.0.0"
+clap = { version = "4.0.29", features = ["derive"] }
+toml = "0.9.5"
+rusqlite = { version = "0.37.0", features = ["bundled"] }
+rust_xlsxwriter = "0.89"

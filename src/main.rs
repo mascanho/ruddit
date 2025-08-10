@@ -1,24 +1,50 @@
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 use chrono::{Duration, Utc};
-use dotenv::dotenv;
+use clap::Parser;
 use reqwest::Client;
 use serde::Deserialize;
-use std::env;
+use std::env::{self};
 
-// Define data structures for Reddit API response
+use crate::{arguments::modeling::Args, database::adding::PostDataWrapper, settings::api_keys};
+
+pub mod actions;
+pub mod arguments;
+pub mod database;
+pub mod exports;
+pub mod settings;
+
+#[derive(Deserialize, Debug)]
+struct RedditPost {
+    id: String,
+    title: String,
+    url: String,
+    created_utc: f64,
+    subreddit: String,
+    // Add other fields you need
+}
+
+#[derive(Deserialize, Debug)]
+struct RedditListingData {
+    children: Vec<RedditListingChild>,
+    after: Option<String>,
+    before: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct RedditListingChild {
+    kind: String,
+    data: RedditPost,
+}
+
 #[derive(Deserialize, Debug)]
 struct RedditListing {
-    data: ListingData,
+    kind: String,
+    data: RedditListingData,
 }
 
 #[derive(Deserialize, Debug)]
 struct ListingData {
     children: Vec<PostDataWrapper>,
-}
-
-#[derive(Deserialize, Debug)]
-struct PostDataWrapper {
-    data: PostData,
 }
 
 #[derive(Deserialize, Debug)]
@@ -62,16 +88,15 @@ async fn get_access_token(client_id: String, client_secret: String) -> Result<St
 }
 
 // Function to fetch and print posts from a subreddit
-async fn get_subreddit_posts(access_token: &str, subreddit: &str) -> Result<(), RedditError> {
+async fn get_subreddit_posts(
+    access_token: &str,
+    subreddit: &str,
+    relevance: &str,
+) -> Result<Vec<PostDataWrapper>, RedditError> {
     let client = Client::new();
-
-    // Calculate the timestamp for one month ago
-    let one_month_ago = Utc::now() - Duration::days(30);
-    let timestamp = one_month_ago.timestamp();
-
     let url = format!(
-        "https://oauth.reddit.com/r/{}/new?limit=100&after={}",
-        subreddit, timestamp
+        "https://oauth.reddit.com/r/{}/{}?limit=100",
+        subreddit, relevance
     );
 
     let response = client
@@ -82,26 +107,79 @@ async fn get_subreddit_posts(access_token: &str, subreddit: &str) -> Result<(), 
         .await?;
 
     let listing: RedditListing = response.json().await?;
-    for post in listing.data.children {
-        println!("{} - {}", post.data.title, post.data.url);
-    }
-    Ok(())
+
+    let posts = listing
+        .data
+        .children
+        .into_iter()
+        .map(|child| PostDataWrapper {
+            id: child.data.id.parse().unwrap_or(0),
+            title: child.data.title,
+            url: child.data.url,
+            timestamp: child.data.created_utc as i64,
+            formatted_date: database::adding::DB::format_timestamp(child.data.created_utc as i64)
+                .expect("Failed to format timestamp"),
+            relevance: relevance.to_string(),
+            subreddit: child.data.subreddit,
+        })
+        .collect();
+
+    Ok(posts)
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenv().ok();
+    // Config stuff from the settings file
+    settings::api_keys::ConfigDirs::create_default_config().unwrap();
+    // initiate clap / args
+    let args = Args::parse();
 
-    let client_id = env::var("REDDIT_CLIENT_ID").expect("Failed to get CLIENT ID");
-    let client_secret = env::var("REDDIT_CLIENT_SECRET").expect("Failed to get CLIENT SECRET");
+    if args.export {
+        exports::csv::create_excel().expect("Failed to export csv")
+    } else if !args.export && !args.clear {
+        // Read the config
+        let config = settings::api_keys::ConfigDirs::read_config().expect("Failed to read config");
+        let api_keys = config.api_keys;
+        let client_id = api_keys.REDDIT_API_ID;
+        let client_secret = api_keys.REDDIT_API_SECRET;
 
-    let token = get_access_token(client_id, client_secret)
-        .await
-        .expect("Failed to get access token");
-    println!("Access Token: {}", token);
+        // Only proceed if at least one argument is provided else use default values
+        if args.subreddit.is_none() || args.subreddit.is_some() {
+            let subreddit = args.subreddit.unwrap_or_else(|| "supplychain".to_string());
+            let relevance = args.relevance.unwrap_or_else(|| "hot".to_string());
 
-    get_subreddit_posts(&token, "software")
-        .await
-        .expect("Failed to get posts");
+            let token = get_access_token(client_id, client_secret)
+                .await
+                .expect("Failed to get token");
+
+            println!(
+                "Fetching posts from r/{} ({} posts)...",
+                subreddit, relevance
+            );
+            let posts = get_subreddit_posts(&token, &subreddit, &relevance)
+                .await
+                .expect("Failed to retrieve the posts data");
+
+            println!("Saving {} posts to database...", posts.len());
+            let mut db = database::adding::DB::new()?;
+            db.create_tables()?;
+            db.append_results(&posts)?;
+
+            println!("Done!");
+        } else {
+            println!("No subreddit or relevance specified. Use --help for usage info.");
+        }
+    }
+
+    // Add API keys
+    if let Some(key) = args.apikey {
+        actions::add_api_keys::add_reddit_api_key(&key).await;
+    }
+
+    // Clear the database
+    if args.clear {
+        database::clear::clear_database()?;
+    }
+
     Ok(())
 }
