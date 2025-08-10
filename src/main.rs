@@ -125,7 +125,7 @@ async fn get_subreddit_posts(
         .collect();
 
     for posts in &posts {
-        println!("{:?}", &posts);
+        println!("{:#?}", &posts);
     }
 
     Ok(posts)
