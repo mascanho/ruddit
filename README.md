@@ -2,6 +2,7 @@
   <img src="https://github.com/mascanho/ruddit/blob/master/src/public/ruddit.png" alt="VoiDo Logo" width="200" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 20px 0;">
   <h1>Ruddit</h1>
 </div>
+
 **Ruddit** is a command-line (CLI) application for interacting with Reddit, built with Rust.
 
 ## ✨ Features
