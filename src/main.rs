@@ -1,10 +1,9 @@
-// REDIT_CLIENT_ID=3uxvR7iY8Fe0cKRSTI3pdQ
-//EDIT_CLIENT_SECRET=8kPXHK9zFmZLB73MlxqNiN6uLmNIhg
-
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use chrono::{Duration, Utc};
+use dotenv::dotenv;
 use reqwest::Client;
 use serde::Deserialize;
+use std::env;
 
 // Define data structures for Reddit API response
 #[derive(Deserialize, Debug)]
@@ -42,7 +41,7 @@ impl From<reqwest::Error> for RedditError {
 }
 
 // Function to get access token from Reddit API
-async fn get_access_token(client_id: &str, client_secret: &str) -> Result<String, RedditError> {
+async fn get_access_token(client_id: String, client_secret: String) -> Result<String, RedditError> {
     let credentials = format!("{}:{}", client_id, client_secret);
     let encoded = general_purpose::STANDARD.encode(credentials);
 
@@ -91,8 +90,10 @@ async fn get_subreddit_posts(access_token: &str, subreddit: &str) -> Result<(), 
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client_id = "YOUR_CLIENT_ID";
-    let client_secret = "YOUR_CLIENT_SECRET";
+    dotenv().ok();
+
+    let client_id = env::var("REDDIT_CLIENT_ID").expect("Failed to get CLIENT ID");
+    let client_secret = env::var("REDDIT_CLIENT_SECRET").expect("Failed to get CLIENT SECRET");
 
     let token = get_access_token(client_id, client_secret)
         .await
