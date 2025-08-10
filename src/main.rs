@@ -124,6 +124,49 @@ async fn get_subreddit_posts(
         })
         .collect();
 
+    for posts in &posts {
+        println!("{:?}", &posts);
+    }
+
+    Ok(posts)
+}
+
+async fn search_subreddit_posts(
+    access_token: &str,
+    query: &str,
+) -> Result<Vec<PostDataWrapper>, RedditError> {
+    let client = Client::new();
+    let url = format!("https://oauth.reddit.com/search?q={}&limit=100", query);
+
+    let response = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", access_token))
+        .header("User-Agent", "RustRedditApp/0.1 by YourUsername")
+        .send()
+        .await?;
+
+    let listing: RedditListing = response.json().await?;
+
+    let posts = listing
+        .data
+        .children
+        .into_iter()
+        .map(|child| PostDataWrapper {
+            id: child.data.id.parse().unwrap_or(0),
+            title: child.data.title,
+            url: child.data.url,
+            timestamp: child.data.created_utc as i64,
+            formatted_date: database::adding::DB::format_timestamp(child.data.created_utc as i64)
+                .expect("Failed to format timestamp"),
+            relevance: "hot".to_string(),
+            subreddit: child.data.subreddit,
+        })
+        .collect();
+
+    for post in &posts {
+        println!("{:#?}", &post);
+    }
+
     Ok(posts)
 }
 
@@ -156,6 +199,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "Fetching posts from r/{} ({} posts)...",
                 subreddit, relevance
             );
+
+            // NOTE: Improve the search option to search subreddits using clap
+            // let _search_posts = search_subreddit_posts(&token, &subreddit)
+            //     .await
+            //     .expect("Failed to retrieve the posts data");
+
             let posts = get_subreddit_posts(&token, &subreddit, &relevance)
                 .await
                 .expect("Failed to retrieve the posts data");
