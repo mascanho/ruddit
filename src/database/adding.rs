@@ -1,11 +1,11 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use directories::BaseDirs;
 use rusqlite::{params, Connection, Result as RusqliteResult};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 // 1. Define your PostDataWrapper with proper date fields
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct PostDataWrapper {
     pub id: i64,
     pub timestamp: i64,         // Unix timestamp

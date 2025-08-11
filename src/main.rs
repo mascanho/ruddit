@@ -8,6 +8,7 @@ use std::env::{self};
 use crate::{arguments::modeling::Args, database::adding::PostDataWrapper, settings::api_keys};
 
 pub mod actions;
+pub mod ai;
 pub mod arguments;
 pub mod database;
 pub mod exports;
@@ -173,6 +174,9 @@ async fn search_subreddit_posts(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // GEMINI API KEY
+    ai::gemini::ask_gemini("hello").await;
+
     // Read the config
     let config = settings::api_keys::ConfigDirs::read_config().expect("Failed to read config");
     let api_keys = config.api_keys;
@@ -188,7 +192,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     // Find-Search option
-
     if let (Some(keyword), Some(relevance)) = (args.find, &args.relevance) {
         let posts = search_subreddit_posts(&token, &keyword, &relevance)
             .await
@@ -200,6 +203,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         for post in &posts {
             println!("{:#?}", post);
         }
+        return Ok(());
+    }
+
+    if let Some(q) = args.gemini {
+        ai::gemini::ask_gemini(&q).await;
         return Ok(());
     }
 
