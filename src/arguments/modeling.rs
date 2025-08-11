@@ -23,4 +23,7 @@ pub struct Args {
 
     #[arg(short, long)]
     pub clear: bool,
+
+    #[arg(short, long)]
+    pub find: Option<String>,
 }

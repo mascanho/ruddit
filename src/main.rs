@@ -134,6 +134,7 @@ async fn get_subreddit_posts(
 async fn search_subreddit_posts(
     access_token: &str,
     query: &str,
+    relevance: &str,
 ) -> Result<Vec<PostDataWrapper>, RedditError> {
     let client = Client::new();
     let url = format!("https://oauth.reddit.com/search?q={}&limit=100", query);
@@ -158,7 +159,7 @@ async fn search_subreddit_posts(
             timestamp: child.data.created_utc as i64,
             formatted_date: database::adding::DB::format_timestamp(child.data.created_utc as i64)
                 .expect("Failed to format timestamp"),
-            relevance: "hot".to_string(),
+            relevance: relevance.to_string(),
             subreddit: child.data.subreddit,
         })
         .collect();
@@ -172,28 +173,43 @@ async fn search_subreddit_posts(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Read the config
+    let config = settings::api_keys::ConfigDirs::read_config().expect("Failed to read config");
+    let api_keys = config.api_keys;
+    let client_id = api_keys.REDDIT_API_ID;
+    let client_secret = api_keys.REDDIT_API_SECRET;
+    let token = get_access_token(client_id, client_secret)
+        .await
+        .expect("Failed to get token");
+
     // Config stuff from the settings file
     settings::api_keys::ConfigDirs::create_default_config().unwrap();
     // initiate clap / args
     let args = Args::parse();
 
+    // Find-Search option
+
+    if let (Some(keyword), Some(relevance)) = (args.find, &args.relevance) {
+        let posts = search_subreddit_posts(&token, &keyword, &relevance)
+            .await
+            .expect("Failed to retrieve the posts data");
+        let mut db = database::adding::DB::new()?;
+        db.create_tables()?;
+        db.append_results(&posts)?;
+
+        for post in &posts {
+            println!("{:#?}", post);
+        }
+        return Ok(());
+    }
+
     if args.export {
         exports::csv::create_excel().expect("Failed to export csv")
     } else if !args.export && !args.clear {
-        // Read the config
-        let config = settings::api_keys::ConfigDirs::read_config().expect("Failed to read config");
-        let api_keys = config.api_keys;
-        let client_id = api_keys.REDDIT_API_ID;
-        let client_secret = api_keys.REDDIT_API_SECRET;
-
         // Only proceed if at least one argument is provided else use default values
         if args.subreddit.is_none() || args.subreddit.is_some() {
             let subreddit = args.subreddit.unwrap_or_else(|| "supplychain".to_string());
             let relevance = args.relevance.unwrap_or_else(|| "hot".to_string());
-
-            let token = get_access_token(client_id, client_secret)
-                .await
-                .expect("Failed to get token");
 
             println!(
                 "Fetching posts from r/{} ({} posts)...",
