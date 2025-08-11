@@ -222,7 +222,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if args.export {
-        exports::csv::create_excel().expect("Failed to export csv")
+        exports::excel::create_excel().expect("Failed to export csv")
     } else if !args.export && !args.clear {
         // Only proceed if at least one argument is provided else use default values
         if args.subreddit.is_none() || args.subreddit.is_some() {

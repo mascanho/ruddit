@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use gemini_rust::{Content, Gemini, Message, Role};
 use log::debug;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
 use std::io::Write;
@@ -9,6 +10,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use crate::exports::excel;
 use crate::{database, settings};
 
 // Define GeminiError enum
@@ -18,6 +20,13 @@ pub enum GeminiError {
     ConfigError(String),
     GeminiApiError(String),
     JsonParsingError(String),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GeminiResponse {
+    answer: String,
+    url: Option<String>,
+    // Add other fields you expect
 }
 
 // Implement Display for GeminiError
@@ -157,9 +166,13 @@ pub async fn ask_gemini(question: &str) -> Result<Value, GeminiError> {
 
         log::debug!("Processed JSON string: {}", json_str);
 
+        excel::export_gemini_to_excel(json_str).expect("Failed to export csv");
+
         // Try to parse the response
         match serde_json::from_str(json_str) {
-            Ok(data) => return Ok(data),
+            Ok(data) => {
+                return Ok(data);
+            }
             Err(e) => {
                 last_error = Some(GeminiError::JsonParsingError(format!(
                     "Failed to parse JSON from API response: {}. Response was: {}",
