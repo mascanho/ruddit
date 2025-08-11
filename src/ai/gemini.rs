@@ -88,7 +88,7 @@ pub async fn ask_gemini(question: &str) -> Result<Value, GeminiError> {
         log::debug!("Attempt {} - System prompt: {}", attempts, system_prompt);
 
         // SPINNER SECTION
-        // Create a flag to control the spinner thread
+        // Create a flag to uontrol the spinner thread
         let running = Arc::new(AtomicBool::new(true));
         let running_clone = running.clone();
 
