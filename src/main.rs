@@ -174,8 +174,8 @@ async fn search_subreddit_posts(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // GEMINI API KEY
-    ai::gemini::ask_gemini("hello").await;
+    // Config stuff from the settings file
+    settings::api_keys::ConfigDirs::create_default_config().unwrap();
 
     // Read the config
     let config = settings::api_keys::ConfigDirs::read_config().expect("Failed to read config");
@@ -186,8 +186,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .expect("Failed to get token");
 
-    // Config stuff from the settings file
-    settings::api_keys::ConfigDirs::create_default_config().unwrap();
     // initiate clap / args
     let args = Args::parse();
 
