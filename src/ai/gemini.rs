@@ -197,7 +197,7 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
         .iter()
         .map(|q| q.to_string())
         .collect::<Vec<String>>()
-        .join(" AND ");
+        .join(" OR ");
 
     println!("Question: {}", &keywords);
 
