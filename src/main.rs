@@ -1,4 +1,4 @@
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use chrono::{Duration, Utc};
 use clap::Parser;
 use reqwest::Client;
@@ -234,6 +234,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Use serde_json to pretty-print the result
                 match serde_json::to_string_pretty(&structured_data) {
                     Ok(_) => return Ok(()),
+
                     Err(e) => eprintln!("Error pretty-printing JSON: {}", e),
                 }
             }
