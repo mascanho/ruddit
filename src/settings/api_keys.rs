@@ -91,4 +91,32 @@ LEAD_KEYWORDS = ["keyword1", "keyword2"]
 
         Ok(app_config)
     }
+
+    pub fn edit_config_file() -> Result<(), Box<dyn std::error::Error>> {
+        // get the config file path and edit natively.
+        let base_dirs = BaseDirs::new().ok_or("Failed to get base directories")?;
+        let config_dir = base_dirs.config_dir();
+        let config_path = config_dir.join("ruddit/settings.toml");
+
+        #[cfg(target_os = "windows")]
+        {
+            Command::new("cmd")
+                .args(&["/C", "start", "", path])
+                .spawn()?;
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            use std::process::Command;
+
+            Command::new("open").arg(config_path).spawn()?;
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            Command::new("xdg-open").arg(path).spawn()?;
+        }
+
+        Ok(())
+    }
 }

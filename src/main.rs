@@ -245,7 +245,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if args.export {
         exports::excel::create_excel().expect("Failed to export csv")
-    } else if !args.export && !args.clear && !args.leads {
+    } else if !args.export && !args.clear && !args.leads && !args.settings {
         // Only proceed if at least one argument is provided else use default values
         if args.subreddit.is_none() || args.subreddit.is_some() {
             let subreddit = args.subreddit.unwrap_or_else(|| "supplychain".to_string());
@@ -295,6 +295,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Clear the database
     if args.clear {
         database::clear::clear_database()?;
+    }
+
+    if args.settings {
+        settings::api_keys::ConfigDirs::edit_config_file().unwrap();
     }
 
     Ok(())

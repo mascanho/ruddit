@@ -35,4 +35,9 @@ pub struct Args {
     // to the LLM based on the .toml file in the config directory
     #[arg(short, long)]
     pub leads: bool,
+
+    // Edit the configuration file
+    // Open OS default editor
+    #[arg(short = 'S', long)]
+    pub settings: bool,
 }

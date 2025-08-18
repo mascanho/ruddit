@@ -202,7 +202,7 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
     println!("Question: {}", &keywords);
 
     let question = format!(
-        "given the keyword or keywoords {} find relevant leads",
+        "given the keyword(s) {}, find relevant leads where the keywords are found in the title only.  ",
         keywords
     );
 
@@ -236,28 +236,27 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
         attempts += 1;
 
         // Create system prompt - more strict on subsequent attempts
+
         let system_prompt = if attempts > 1 {
             format!(
-                "Given the following data: {}. You are a structured data generator. \
-                Your ONLY response should be a VALID JSON array of objects. Each object should contain 'answer' and 'url' keys. \
-                The JSON must be properly formatted with double quotes for property names and strings. \
-                Do NOT include any other text, explanations, or conversational phrases outside the JSON. \
-                Do NOT wrap the JSON in markdown code blocks. Output ONLY the raw JSON. \
-                Example of acceptable response: [\
-                    {{\"answer\": \"some answer\", \"url\": \"https://example.com\"}}\
-                ]",
-                json_reddits
-            )
+        "Given the following data: {}. You are a structured data generator. \
+        Your ONLY response should be a VALID JSON array of objects. Each object should contain 'formatted_date', 'title', 'url', 'relevance' and 'subreddit' keys. \
+        The JSON must be properly formatted with double quotes for property names and strings. \
+        Do NOT include any other text, explanations, or conversational phrases outside the JSON. \
+        Do NOT wrap the JSON in markdown code blocks. Output ONLY the raw JSON. \
+        Example of acceptable response: [{{\"formatted_date\": \"2024-08-18\", \"title\": \"Looking for a new CRM\", \"url\": \"https://example.com\", \"relevance\": \"High\", \"subreddit\": \"r/sales\"}}] \
+        json_reddits",
+        json_reddits
+    )
         } else {
             format!(
-                "Given the following data: {}. You are a structured data generator. \
-                Your ONLY response should be a JSON array of objects. Each object should contain 'answer' and 'url' keys. \
-                Do not include any other text, explanations, or conversational phrases.\
-                Example of acceptable response: [\
-                    {{\"answer\": \"some answer\", \"url\": \"https://example.com\"}}\
-                ]",
-                json_reddits
-            )
+        "Given the following data: {}. You are a structured data generator. \
+        Your ONLY response should be a JSON array of objects. Each object should contain 'formatted_date', 'title', 'url', 'relevance' and 'subreddit' keys. \
+        Do not include any other text, explanations, or conversational phrases. \
+        Example of acceptable response: [{{\"formatted_date\": \"2024-08-18\", \"title\": \"Looking for a new CRM\", \"url\": \"https://example.com\", \"relevance\": \"High\", \"subreddit\": \"r/sales\"}}] \
+        json_reddits",
+        json_reddits
+    )
         };
 
         log::debug!("Attempt {} - System prompt: {}", attempts, system_prompt);
