@@ -11,6 +11,8 @@ pub struct ApiKeys {
     pub RELEVANCE: String,
     pub LEAD_KEYWORDS: Vec<String>,
     pub BRANDED_KEYWORDS: Vec<String>,
+    pub SENTIMENT: Vec<String>,
+    pub MATCH: String,
 }
 
 #[derive(Debug)]
@@ -64,6 +66,8 @@ RELEVANCE = "hot"
 GEMINI_API_KEY = "your_api_key_here"
 BRANDED_KEYWORDS = ["keyword1", "keyword2"]
 LEAD_KEYWORDS = ["keyword1", "keyword2"]
+SENTIMENT = ["keyword1", "keyword2"]
+MATCH = "OR"
 
 "#
         .trim_start();
