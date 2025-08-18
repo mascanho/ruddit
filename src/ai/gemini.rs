@@ -324,8 +324,6 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
 
         log::debug!("Processed JSON string: {}", json_str);
 
-        excel::export_gemini_to_excel(json_str).expect("Failed to export csv");
-
         // Try to parse the response
         match serde_json::from_str(json_str) {
             Ok(data) => {

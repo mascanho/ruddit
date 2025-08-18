@@ -1,4 +1,4 @@
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 use chrono::{Duration, Utc};
 use clap::Parser;
 use reqwest::Client;
@@ -274,8 +274,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             println!("No subreddit or relevance specified. Use --help for usage info.");
         }
+
+        // Get the leads and print them
     } else if args.leads {
-        ai::gemini::gemini_generate_leads().await;
+        let leads = ai::gemini::gemini_generate_leads()
+            .await
+            .expect("Failed to generate leads");
+
+        match serde_json::to_string_pretty(&leads) {
+            Ok(_) => return Ok(()),
+            Err(e) => eprintln!("Error pretty-printing JSON: {}", e),
+        }
     }
 
     // Add API keys
