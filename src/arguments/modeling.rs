@@ -30,4 +30,9 @@ pub struct Args {
     // Needs to accept the relevance argument
     #[arg(short, long, requires = "relevance")]
     pub find: Option<String>,
+
+    // Export the pre-defined data based on the arguments passed
+    // to the LLM based on the .toml file in the config directory
+    #[arg(short, long)]
+    pub leads: bool,
 }

@@ -162,3 +162,7 @@ pub fn export_gemini_to_excel(gemini_data: &str) -> Result<(), XlsxError> {
 
     Ok(())
 }
+
+// Function to export the leads that are generated from the LLM
+// This happens when the user passes the -l or -lead flag
+pub async fn export_leads_with_gemini(data: &str) {}

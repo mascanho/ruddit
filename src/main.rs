@@ -67,6 +67,29 @@ impl From<reqwest::Error> for RedditError {
     }
 }
 
+pub struct AppState {
+    pub data: Vec<PostDataWrapper>,
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        // Initialize database connection
+        let db = database::adding::DB::new()
+            .map_err(|e| RedditError::TokenExtraction)
+            .unwrap();
+
+        // Get data from database
+        let reddits = db
+            .get_db_results()
+            .map_err(|e| RedditError::TokenExtraction)
+            .unwrap();
+
+        let vec = reddits;
+
+        Self { data: vec }
+    }
+}
+
 // Function to get access token from Reddit API
 async fn get_access_token(client_id: String, client_secret: String) -> Result<String, RedditError> {
     let credentials = format!("{}:{}", client_id, client_secret);
@@ -184,7 +207,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client_secret = api_keys.REDDIT_API_SECRET;
     let token = get_access_token(client_id, client_secret)
         .await
-        .expect("Failed to get token");
+        .expect("Failed to get token, check your configuration file for API keys");
 
     // initiate clap / args
     let args = Args::parse();
@@ -210,9 +233,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(structured_data) => {
                 // Use serde_json to pretty-print the result
                 match serde_json::to_string_pretty(&structured_data) {
-                    Ok(pretty_json) => {
-                        println!("{}", pretty_json);
-                    }
+                    Ok(_) => return Ok(()),
                     Err(e) => eprintln!("Error pretty-printing JSON: {}", e),
                 }
             }
@@ -223,7 +244,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if args.export {
         exports::excel::create_excel().expect("Failed to export csv")
-    } else if !args.export && !args.clear {
+    } else if !args.export && !args.clear && !args.leads {
         // Only proceed if at least one argument is provided else use default values
         if args.subreddit.is_none() || args.subreddit.is_some() {
             let subreddit = args.subreddit.unwrap_or_else(|| "supplychain".to_string());
@@ -252,6 +273,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             println!("No subreddit or relevance specified. Use --help for usage info.");
         }
+    } else if args.leads {
+        ai::gemini::gemini_generate_leads().await;
     }
 
     // Add API keys

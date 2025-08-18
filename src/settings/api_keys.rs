@@ -9,6 +9,8 @@ pub struct ApiKeys {
     pub GEMINI_API_KEY: String,
     pub SUBREDDIT: String,
     pub RELEVANCE: String,
+    pub LEAD_KEYWORDS: Vec<String>,
+    pub BRANDED_KEYWORDS: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -60,6 +62,9 @@ REDDIT_API_SECRET = "your_api_secret_here"
 SUBREDDIT = "supplychain"
 RELEVANCE = "hot"
 GEMINI_API_KEY = "your_api_key_here"
+BRANDED_KEYWORDS = ["keyword1", "keyword2"]
+LEAD_KEYWORDS = ["keyword1", "keyword2"]
+
 "#
         .trim_start();
 
