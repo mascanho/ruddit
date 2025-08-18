@@ -166,8 +166,6 @@ pub async fn ask_gemini(question: &str) -> Result<Value, GeminiError> {
 
         log::debug!("Processed JSON string: {}", json_str);
 
-        excel::export_gemini_to_excel(json_str).expect("Failed to export csv");
-
         // Try to parse the response
         match serde_json::from_str(json_str) {
             Ok(data) => {
@@ -195,13 +193,18 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
     let question_vec = settings.api_keys.LEAD_KEYWORDS;
 
     // Get each keyword inside the vector and compose a string to pass to the API
-    let question = question_vec
+    let keywords = question_vec
         .iter()
         .map(|q| q.to_string())
         .collect::<Vec<String>>()
         .join(" AND ");
 
-    println!("Question: {}", &question);
+    println!("Question: {}", &keywords);
+
+    let question = format!(
+        "given the keyword or keywoords {} find relevant leads",
+        keywords
+    );
 
     // Initialize database connection
     let db = database::adding::DB::new()
@@ -236,18 +239,23 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
         let system_prompt = if attempts > 1 {
             format!(
                 "Given the following data: {}. You are a structured data generator. \
-                Your ONLY response should be a VALID JSON object containing the answers and URLs when needed. \
+                Your ONLY response should be a VALID JSON array of objects. Each object should contain 'answer' and 'url' keys. \
                 The JSON must be properly formatted with double quotes for property names and strings. \
                 Do NOT include any other text, explanations, or conversational phrases outside the JSON. \
                 Do NOT wrap the JSON in markdown code blocks. Output ONLY the raw JSON. \
-                Example of acceptable response: {{\"answer\": \"some answer\", \"url\": \"https://example.com\"}}",
+                Example of acceptable response: [\
+                    {{\"answer\": \"some answer\", \"url\": \"https://example.com\"}}\
+                ]",
                 json_reddits
             )
         } else {
             format!(
                 "Given the following data: {}. You are a structured data generator. \
-                Your ONLY response should be a JSON object containing the answers and URLs when needed. \
-                Do not include any other text, explanations, or conversational phrases.",
+                Your ONLY response should be a JSON array of objects. Each object should contain 'answer' and 'url' keys. \
+                Do not include any other text, explanations, or conversational phrases.\
+                Example of acceptable response: [\
+                    {{\"answer\": \"some answer\", \"url\": \"https://example.com\"}}\
+                ]",
                 json_reddits
             )
         };
@@ -324,10 +332,12 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
 
         log::debug!("Processed JSON string: {}", json_str);
 
-        // Try to parse the response
-        match serde_json::from_str(json_str) {
-            Ok(data) => {
-                return Ok(data);
+        excel::export_gemini_to_excel(json_str).expect("Failed to export gemini leads to excel");
+
+        // Try to parse the response to validate it
+        match serde_json::from_str::<Value>(json_str) {
+            Ok(_) => {
+                return Ok(());
             }
             Err(e) => {
                 last_error = Some(GeminiError::JsonParsingError(format!(

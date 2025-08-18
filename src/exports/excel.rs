@@ -1,9 +1,6 @@
 use std::fs;
 
-use crate::{
-    ai::gemini::GeminiResponse,
-    database::{self, adding::PostDataWrapper},
-};
+use crate::database::{self, adding::PostDataWrapper};
 use chrono::Local;
 use directories::UserDirs;
 use rust_xlsxwriter::{Format, FormatAlign, Workbook, XlsxError};
@@ -85,73 +82,65 @@ pub fn create_excel() -> Result<(), Box<dyn std::error::Error>> {
 
 // Export the filtered data by the LLM into a .xlsx
 pub fn export_gemini_to_excel(gemini_data: &str) -> Result<(), XlsxError> {
-    // convert gemini_data to Value
-    let gemini_data: Vec<Value> = serde_json::from_str(gemini_data).expect("Failed to parse JSON");
+    let gemini_values: Vec<Value> = serde_json::from_str(gemini_data)
+        .or_else(|_| serde_json::from_str(gemini_data).map(|v: Value| vec![v]))
+        .expect("Failed to parse JSON as an array or a single object");
 
-    let user_dirs = UserDirs::new()
-        .ok_or("Failed to get user directories")
-        .expect("Failed to get direcotry to save");
+    let user_dirs = UserDirs::new().ok_or_else(|| {
+        XlsxError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Failed to get user directories",
+        ))
+    })?;
+    let desktop = user_dirs.desktop_dir().ok_or_else(|| {
+        XlsxError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Failed to get desktop directory",
+        ))
+    })?;
 
-    let desktop = user_dirs
-        .desktop_dir()
-        .ok_or("Failed to get desktop directory")
-        .expect("Failed to get desktop directory");
+    println!("Exporting {} records to Excel", gemini_values.len());
 
-    //println!("Exporting {} records to Excel", gemini_data.len());
-
-    // Create new workbook
     let mut workbook = Workbook::new();
     let worksheet = workbook.add_worksheet();
-    worksheet.set_name("Reddit Posts")?;
+    worksheet.set_name("Gemini Leads")?;
 
-    // Create header format
     let header_format = Format::new().set_align(FormatAlign::Center).set_bold();
 
-    // Get the headers from the gemini_data
-    //let headers = gemini_data["gemini"].as_array().unwrap()[0]
-    //    .as_object()
-    //    .ok_or("Failed to get headers")
-    //    .expect("Failed to get headers")
-    //    .keys();
+    if let Some(first_item) = gemini_values.get(0) {
+        if let Some(obj) = first_item.as_object() {
+            let headers: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
+            for (col, header) in headers.iter().enumerate() {
+                worksheet.write_string_with_format(0, col as u16, *header, &header_format)?;
+            }
 
-    // Write headers
+            for (row, value) in gemini_values.iter().enumerate() {
+                let row_num = (row + 1) as u32;
+                if let Some(obj) = value.as_object() {
+                    for (col, header) in headers.iter().enumerate() {
+                        let cell_value = obj.get(*header).and_then(|v| v.as_str()).unwrap_or("");
+                        worksheet.write_string(row_num, col as u16, cell_value)?;
+                    }
+                }
+            }
+        }
+    }
 
-    // Write data rows
-    //for (row, result) in gemini_data.lines().enumerate() {
-    //    let row_num = (row + 1) as u32;
-    //    let cells = [
-    //        // result.timestamp.to_string(),
-    //        result.formatted_date.clone(),
-    //        result.title.clone(),
-    //        result.url.clone(),
-    //        result.relevance.clone(),
-    //        result.subreddit.clone(),
-    //    ];
-    //
-    //    for (col, cell) in cells.iter().enumerate() {
-    //        worksheet.write_string(row_num, col as u16, cell)?;
-    //    }
-    //}
-
-    // Auto-fit columns for better readability
     worksheet.autofit();
 
-    // Save to file with timestamp
     let filename = format!(
-        "Reddit_data_{}.xlsx",
+        "Gemini_leads_{}.xlsx",
         Local::now().format("%d-%m-%Y_%H-%M-%S")
     );
-
     let folder_name = "Reddit_data";
     let folder_path = desktop.join(folder_name);
 
-    if let Err(e) = fs::create_dir_all(&folder_path) {
-        eprintln!("Failed to create directory: {}", e);
-        return Err(e.into());
-    }
+    fs::create_dir_all(&folder_path).map_err(|e| XlsxError::IoError(e))?;
 
-    workbook.save(folder_path.join(filename.as_str()))?;
+    let save_path = folder_path.join(&filename);
+    workbook.save(&save_path)?;
 
+    println!("Successfully exported to {:?}", save_path);
     Ok(())
 }
 
