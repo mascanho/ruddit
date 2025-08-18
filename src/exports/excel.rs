@@ -85,11 +85,8 @@ pub fn create_excel() -> Result<(), Box<dyn std::error::Error>> {
 
 // Export the filtered data by the LLM into a .xlsx
 pub fn export_gemini_to_excel(gemini_data: &str) -> Result<(), XlsxError> {
-    // convert json string to vector of PostDataWrapper
-
-    let gemini_data: Value = serde_json::from_str(gemini_data).unwrap();
-
-    println!("Exporting {:#?} records to Excel", gemini_data);
+    // convert gemini_data to Value
+    let gemini_data: Vec<Value> = serde_json::from_str(gemini_data).expect("Failed to parse JSON");
 
     let user_dirs = UserDirs::new()
         .ok_or("Failed to get user directories")
@@ -110,19 +107,14 @@ pub fn export_gemini_to_excel(gemini_data: &str) -> Result<(), XlsxError> {
     // Create header format
     let header_format = Format::new().set_align(FormatAlign::Center).set_bold();
 
-    // Write headers
-    let headers = [
-        // "Timestamp",
-        "Date",
-        "Title",
-        "URL",
-        "Relevance",
-        "Subreddit",
-    ];
+    // Get the headers from the gemini_data
+    //let headers = gemini_data["gemini"].as_array().unwrap()[0]
+    //    .as_object()
+    //    .ok_or("Failed to get headers")
+    //    .expect("Failed to get headers")
+    //    .keys();
 
-    for (col, header) in headers.iter().enumerate() {
-        worksheet.write_string_with_format(0, col as u16, *header, &header_format)?;
-    }
+    // Write headers
 
     // Write data rows
     //for (row, result) in gemini_data.lines().enumerate() {
