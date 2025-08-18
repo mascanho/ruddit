@@ -228,13 +228,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Query GEMINI
+
+    // Query GEMINI
     if let Some(q) = args.gemini {
         match ai::gemini::ask_gemini(&q).await {
             Ok(structured_data) => {
                 // Use serde_json to pretty-print the result
                 match serde_json::to_string_pretty(&structured_data) {
-                    Ok(_) => return Ok(()),
-
+                    Ok(pretty) => {
+                        println!("{}", pretty);
+                        return Ok(());
+                    }
                     Err(e) => eprintln!("Error pretty-printing JSON: {}", e),
                 }
             }

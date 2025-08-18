@@ -8,36 +8,52 @@ use clap::Parser;
 #[command(about = "A simple sales CLI", long_about = None)]
 #[command(version, about, long_about = None)]
 pub struct Args {
-    // API KEY
-    #[arg(short, long)]
+    /// API key for authentication
+    #[arg(short, long, help = "API key for authentication")]
     pub apikey: Option<String>,
 
-    #[arg(short, long)]
+    /// Gemini model key
+    #[arg(short, long, help = "Query Gemini to discover insights in your data")]
     pub gemini: Option<String>,
 
-    #[arg(short, long)]
+    /// Subreddit name to fetch posts from
+    #[arg(short, long, help = "Subreddit name to fetch posts from")]
     pub subreddit: Option<String>,
 
-    #[arg(short, long)]
+    /// Relevance filter for search results
+    #[arg(short, long, help = "Relevance filter for search results")]
     pub relevance: Option<String>,
 
-    #[arg(short, long)]
+    /// Export the results
+    #[arg(short, long, help = "Export the results")]
     pub export: bool,
 
-    #[arg(short, long)]
+    /// Clear cached data
+    #[arg(short, long, help = "Clear cached data")]
     pub clear: bool,
 
-    // Needs to accept the relevance argument
-    #[arg(short, long, requires = "relevance")]
+    /// Search for a specific keyword (requires --relevance)
+    #[arg(
+        short,
+        long,
+        requires = "relevance",
+        help = "Search for a specific keyword (requires --relevance)"
+    )]
     pub find: Option<String>,
 
-    // Export the pre-defined data based on the arguments passed
-    // to the LLM based on the .toml file in the config directory
-    #[arg(short, long)]
+    /// Export pre-defined data based on arguments and config file
+    #[arg(
+        short,
+        long,
+        help = "Export pre-defined data based on arguments and config file"
+    )]
     pub leads: bool,
 
-    // Edit the configuration file
-    // Open OS default editor
-    #[arg(short = 'S', long)]
+    /// Open the configuration file in the OS default editor
+    #[arg(
+        short = 'S',
+        long,
+        help = "Open the configuration file in the OS default editor"
+    )]
     pub settings: bool,
 }
