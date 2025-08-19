@@ -191,6 +191,11 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
         .map_err(|e| GeminiError::ConfigError(e.to_string()))?;
 
     let question_vec = settings.api_keys.LEAD_KEYWORDS;
+    if question_vec.is_empty() {
+        return Err(GeminiError::ConfigError(
+            "No lead keywords found in configuration file. Add default Keywords to match with reddit data and export leads".to_string(),
+        ));
+    }
 
     // Get each keyword inside the vector and compose a string to pass to the API
     let keywords = question_vec
@@ -199,7 +204,7 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
         .collect::<Vec<String>>()
         .join(" OR ");
 
-    println!("Question: {}", &keywords);
+    println!("Matching Keywords: {}", &keywords);
 
     let question = format!(
         "given the keyword(s) {}, find relevant leads where the keywords are found in the title only.  ",

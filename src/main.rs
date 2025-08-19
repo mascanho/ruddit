@@ -5,7 +5,7 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::env::{self};
 
-use crate::{arguments::modeling::Args, database::adding::PostDataWrapper, settings::api_keys};
+use crate::{arguments::modeling::Args, database::adding::PostDataWrapper, settings::api_keys::{self, AppConfig}};
 
 pub mod actions;
 pub mod ai;
@@ -201,7 +201,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     settings::api_keys::ConfigDirs::create_default_config().unwrap();
 
     // Read the config
-    let config = settings::api_keys::ConfigDirs::read_config().expect("Failed to read config");
+ let config = settings::api_keys::ConfigDirs::read_config()
+        .unwrap_or_else(|err| {
+            eprintln!("Warning: using default config because: {err}");
+            AppConfig::default()
+        });
+
     let api_keys = config.api_keys;
     let client_id = api_keys.REDDIT_API_ID;
     let client_secret = api_keys.REDDIT_API_SECRET;
@@ -227,7 +232,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    // Query GEMINI
+    // If the user needs to open the settings
+    // Run it before all the other logic
+     if args.settings {
+        settings::api_keys::ConfigDirs::edit_config_file().unwrap();
+    }
 
     // Query GEMINI
     if let Some(q) = args.gemini {
@@ -301,9 +310,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         database::clear::clear_database()?;
     }
 
-    if args.settings {
-        settings::api_keys::ConfigDirs::edit_config_file().unwrap();
-    }
+   
 
     Ok(())
 }

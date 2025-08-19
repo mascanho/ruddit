@@ -129,7 +129,7 @@ pub fn export_gemini_to_excel(gemini_data: &str) -> Result<(), XlsxError> {
     worksheet.autofit();
 
     let filename = format!(
-        "Gemini_leads_{}.xlsx",
+        "Ruddit_leads_{}.xlsx",
         Local::now().format("%d-%m-%Y_%H-%M-%S")
     );
     let folder_name = "Reddit_data";

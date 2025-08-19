@@ -9,11 +9,20 @@ pub struct ApiKeys {
     pub GEMINI_API_KEY: String,
     pub SUBREDDIT: String,
     pub RELEVANCE: String,
+
+    #[serde(default)]
     pub LEAD_KEYWORDS: Vec<String>,
+
+    #[serde(default)]
     pub BRANDED_KEYWORDS: Vec<String>,
+
+    #[serde(default)]
     pub SENTIMENT: Vec<String>,
+
+        #[serde(default)]
     pub MATCH: String,
 }
+
 
 #[derive(Debug)]
 pub struct ConfigDirs {
@@ -28,6 +37,31 @@ pub struct ConfigDirs {
 pub struct AppConfig {
     pub api_keys: ApiKeys,
 }
+
+impl Default for ApiKeys {
+    fn default() -> Self {
+        ApiKeys {
+            REDDIT_API_ID: "CHANGE_ME".to_string(),
+            REDDIT_API_SECRET: "CHANGE_ME".to_string(),
+            GEMINI_API_KEY: "CHANGE_ME".to_string(),
+            SUBREDDIT: "all".to_string(),
+            RELEVANCE: "hot".to_string(),
+            LEAD_KEYWORDS: vec![],
+            BRANDED_KEYWORDS: vec![],
+            SENTIMENT: vec!["neutral".to_string()],
+            MATCH: "".to_string(),
+        }
+    }
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        AppConfig {
+            api_keys: ApiKeys::default(),
+        }
+    }
+}
+
 
 impl ConfigDirs {
     pub fn new() -> Option<Self> {
@@ -81,20 +115,23 @@ MATCH = "OR"
         Ok(())
     }
 
-    pub fn read_config() -> Result<AppConfig, Box<dyn std::error::Error>> {
-        let base_dirs = BaseDirs::new().ok_or("Failed to get base directories")?;
-        let config_dir = base_dirs.config_dir();
+   pub fn read_config() -> Result<AppConfig, Box<dyn std::error::Error>> {
+    let base_dirs = BaseDirs::new().ok_or("Failed to get base directories")?;
+    let config_dir = base_dirs.config_dir();
 
-        // Path to the config file
-        let config_path = config_dir.join("ruddit/settings.toml");
-        println!("Reading config file: {:#?}", config_path);
+    // Path to the config file
+    let config_path = config_dir.join("ruddit/settings.toml");
+    println!("Reading config file: {:#?}", config_path);
 
-        // Read from file
-        let toml_content = fs::read_to_string(config_path)?;
-        let app_config: AppConfig = toml::from_str(&toml_content)?;
+    // Read from file
+    let toml_content = fs::read_to_string(config_path)?;
+    
+    // Try parsing; on failure, return the error instead of panicking
+    let app_config: AppConfig = toml::from_str(&toml_content)?;
 
-        Ok(app_config)
-    }
+    Ok(app_config)
+}
+
 
     pub fn edit_config_file() -> Result<(), Box<dyn std::error::Error>> {
         // get the config file path and edit natively.
@@ -104,8 +141,10 @@ MATCH = "OR"
 
         #[cfg(target_os = "windows")]
         {
+            use std::process::Command;
+
             Command::new("cmd")
-                .args(&["/C", "start", "", path])
+                .args(&["/C", "start", "", &config_path.to_string_lossy()])
                 .spawn()?;
         }
 
@@ -118,7 +157,7 @@ MATCH = "OR"
 
         #[cfg(target_os = "linux")]
         {
-            Command::new("xdg-open").arg(path).spawn()?;
+            Command::new("xdg-open").arg(config_path).spawn()?;
         }
 
         Ok(())
