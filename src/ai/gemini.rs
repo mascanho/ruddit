@@ -77,19 +77,12 @@ pub async fn ask_gemini(question: &str) -> Result<Value, GeminiError> {
         // Create system prompt - more strict on subsequent attempts
         let system_prompt = if attempts > 1 {
             format!(
-                "Given the following data: {}. You are a structured data generator. \
-                Your ONLY response should be a VALID JSON object containing the answers and URLs when needed. \
-                The JSON must be properly formatted with double quotes for property names and strings. \
-                Do NOT include any other text, explanations, or conversational phrases outside the JSON. \
-                Do NOT wrap the JSON in markdown code blocks. Output ONLY the raw JSON. \
-                Example of acceptable response: {{\"answer\": \"some answer\", \"url\": \"https://example.com\"}}",
+                "Given the following data: {}, output the information in the best way possible to answer the questions. Be as thorough as possible and provide URLs when needed.",
                 json_reddits
             )
         } else {
             format!(
-                "Given the following data: {}. You are a structured data generator. \
-                Your ONLY response should be a JSON object containing the answers and URLs when needed. \
-                Do not include any other text, explanations, or conversational phrases.",
+                "Given the following data: {}, output the information in the best way possible to answer the questions. Be as thorough as possible and provide URLs when needed.",
                 json_reddits
             )
         };

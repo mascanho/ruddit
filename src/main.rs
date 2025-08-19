@@ -300,11 +300,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Add API keys
-    if let Some(key) = args.apikey {
-        actions::add_api_keys::add_reddit_api_key(&key).await;
-    }
-
     // Clear the database
     if args.clear {
         database::clear::clear_database()?;

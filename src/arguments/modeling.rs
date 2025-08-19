@@ -5,13 +5,10 @@ use clap::Parser;
 #[derive(Debug, Parser)]
 #[command(name = "Ruddit")]
 #[command(version = "0.1")]
-#[command(about = "A simple sales CLI", long_about = None)]
+#[command(about = "Ruddit - A lead finder for Reddit built with Rust", long_about = None)]
 #[command(version, about, long_about = None)]
 pub struct Args {
-    /// API key for authentication
-    #[arg(short, long, help = "API key for authentication")]
-    pub apikey: Option<String>,
-
+ 
     /// Gemini model key
     #[arg(short, long, help = "Query Gemini to discover insights in your data")]
     pub gemini: Option<String>,
@@ -25,11 +22,11 @@ pub struct Args {
     pub relevance: Option<String>,
 
     /// Export the results
-    #[arg(short, long, help = "Export the results")]
+    #[arg(short, long, help = "Export all the results, without filtering")]
     pub export: bool,
 
     /// Clear cached data
-    #[arg(short, long, help = "Clear cached data")]
+    #[arg(short, long, help = "Delete all the data from the databse ** DANGER **")]
     pub clear: bool,
 
     /// Search for a specific keyword (requires --relevance)
@@ -45,7 +42,7 @@ pub struct Args {
     #[arg(
         short,
         long,
-        help = "Export pre-defined data based on arguments and config file"
+        help = "Export pre-defined keyword arguments in yout config file"
     )]
     pub leads: bool,
 
