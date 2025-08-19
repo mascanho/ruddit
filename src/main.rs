@@ -161,7 +161,7 @@ async fn search_subreddit_posts(
     relevance: &str,
 ) -> Result<Vec<PostDataWrapper>, RedditError> {
     let client = Client::new();
-    let url = format!("https://oauth.reddit.com/search?q={}&limit=100", query);
+    let url = format!("https://oauth.reddit.com/search?q={}&limit=1000&t=all", query);
 
     let response = client
         .get(&url)

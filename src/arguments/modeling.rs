@@ -21,7 +21,7 @@ pub struct Args {
     pub subreddit: Option<String>,
 
     /// Relevance filter for search results
-    #[arg(short, long, help = "Relevance filter for search results")]
+    #[arg(short, long, help = "Relevance filter for search results ( hot | new | top | comments | relevance )")]
     pub relevance: Option<String>,
 
     /// Export the results
