@@ -1,11 +1,15 @@
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use chrono::{Duration, Utc};
 use clap::Parser;
 use reqwest::Client;
 use serde::Deserialize;
 use std::env::{self};
 
-use crate::{arguments::modeling::Args, database::adding::PostDataWrapper, settings::api_keys::{self, AppConfig}};
+use crate::{
+    arguments::modeling::Args,
+    database::adding::PostDataWrapper,
+    settings::api_keys::{self, AppConfig},
+};
 
 pub mod actions;
 pub mod ai;
@@ -161,7 +165,10 @@ async fn search_subreddit_posts(
     relevance: &str,
 ) -> Result<Vec<PostDataWrapper>, RedditError> {
     let client = Client::new();
-    let url = format!("https://oauth.reddit.com/search?q={}&limit=1000&t=all", query);
+    let url = format!(
+        "https://oauth.reddit.com/search?q={}&limit=1000&t=all",
+        query
+    );
 
     let response = client
         .get(&url)
@@ -201,28 +208,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     settings::api_keys::ConfigDirs::create_default_config().unwrap();
 
     // Read the config
- let config = settings::api_keys::ConfigDirs::read_config()
-        .unwrap_or_else(|err| {
-            eprintln!("Warning: using default config because: {err}");
-            AppConfig::default()
-        });
+    let config = settings::api_keys::ConfigDirs::read_config().unwrap_or_else(|err| {
+        eprintln!("Warning: using default config because: {err}");
+        AppConfig::default()
+    });
 
     let api_keys = config.api_keys;
     let client_id = api_keys.REDDIT_API_ID;
     let client_secret = api_keys.REDDIT_API_SECRET;
-   
-// If the user has not set the API keys and app config, prompt them to do so
- let token = match get_access_token(client_id, client_secret).await {
-    Ok(t) if !t.is_empty() => t,
-    _ => {
-        eprintln!("Failed to retrieve access token. Add your API keys to the config file.");
-        // retry logic here
-         settings::api_keys::ConfigDirs::edit_config_file().unwrap();
-        return Ok(());
-    }
-};
 
+    // If the user has not set the API keys and app config, prompt them to do so
+    let token = match get_access_token(client_id, client_secret).await {
+        Ok(t) if !t.is_empty() => t,
+        Ok(_) => {
+            eprintln!("Received an empty token. Check your API credentials.");
+            settings::api_keys::ConfigDirs::edit_config_file()
+                .unwrap_or_else(|e| eprintln!("Failed to open config file for editing: {e}"));
+            return Ok(());
+        }
 
+        Err(e) => {
+            eprintln!("Failed to retrieve access token: {:?}", e);
+            settings::api_keys::ConfigDirs::edit_config_file()
+                .unwrap_or_else(|e| eprintln!("Failed to open config file for editing: {e}"));
+            return Ok(());
+        }
+    };
 
     // initiate clap / args
     let args = Args::parse();
@@ -244,7 +255,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // If the user needs to open the settings
     // Run it before all the other logic
-     if args.settings {
+    if args.settings {
         settings::api_keys::ConfigDirs::edit_config_file().unwrap();
     }
 
