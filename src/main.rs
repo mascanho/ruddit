@@ -210,9 +210,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let api_keys = config.api_keys;
     let client_id = api_keys.REDDIT_API_ID;
     let client_secret = api_keys.REDDIT_API_SECRET;
-    let token = get_access_token(client_id, client_secret)
-        .await
-        .expect("Failed to get token, check your configuration file for API keys");
+   
+// If the user has not set the API keys and app config, prompt them to do so
+ let token = match get_access_token(client_id, client_secret).await {
+    Ok(t) if !t.is_empty() => t,
+    _ => {
+        eprintln!("Failed to retrieve access token. Add your API keys to the config file.");
+        // retry logic here
+         settings::api_keys::ConfigDirs::edit_config_file().unwrap();
+        return Ok(());
+    }
+};
+
+
 
     // initiate clap / args
     let args = Args::parse();
@@ -304,8 +314,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.clear {
         database::clear::clear_database()?;
     }
-
-   
 
     Ok(())
 }

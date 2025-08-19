@@ -42,7 +42,7 @@ pub struct Args {
     #[arg(
         short,
         long,
-        help = "Export pre-defined keyword arguments in yout config file"
+        help = "Export data based on pre-defined keyword arguments in yout config file"
     )]
     pub leads: bool,
 
