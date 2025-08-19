@@ -103,7 +103,7 @@ async fn get_access_token(client_id: String, client_secret: String) -> Result<St
     let response = client
         .post("https://www.reddit.com/api/v1/access_token")
         .header("Authorization", format!("Basic {}", encoded))
-        .header("User-Agent", "RustRedditApp/0.1 by YourUsername")
+        .header("User-Agent", "RudditApp/0.1 by Ruddit")
         .form(&[("grant_type", "client_credentials")])
         .send()
         .await?;
