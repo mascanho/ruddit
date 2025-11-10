@@ -61,17 +61,14 @@ impl DB {
     }
 
     pub fn create_tables(&self) -> RusqliteResult<()> {
-        // Create posts table
-        // Drop and recreate posts table to ensure correct schema
-        self.conn.execute("DROP TABLE IF EXISTS reddit_posts", [])?;
-
+        // Create posts table if it doesn't exist
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS reddit_posts (
                 id INTEGER PRIMARY KEY,
                 timestamp INTEGER NOT NULL,
                 formatted_date TEXT NOT NULL,
                 title TEXT NOT NULL,
-                url TEXT UNIQUE NOT NULL,
+                url TEXT NOT NULL,
                 relevance TEXT NOT NULL DEFAULT '',
                 subreddit TEXT NOT NULL DEFAULT '',
                 permalink TEXT NOT NULL DEFAULT ''
@@ -86,10 +83,7 @@ impl DB {
     }
 
     pub fn create_comments_table(&self) -> RusqliteResult<()> {
-        // Drop and recreate the table with all columns
-        self.conn
-            .execute("DROP TABLE IF EXISTS reddit_comments", [])?;
-
+        // Create comments table if it doesn't exist
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS reddit_comments (
                 id TEXT PRIMARY KEY,
@@ -115,7 +109,7 @@ impl DB {
 
         {
             let mut stmt = tx.prepare(
-                "INSERT INTO reddit_posts
+                "INSERT OR IGNORE INTO reddit_posts
                 (timestamp, formatted_date, title, url, relevance, subreddit, permalink)
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             )?;
@@ -143,7 +137,7 @@ impl DB {
 
         {
             let mut stmt = tx.prepare(
-                "INSERT OR REPLACE INTO reddit_comments
+                "INSERT OR IGNORE INTO reddit_comments
                 (id, post_id, body, author, timestamp, formatted_date, score, permalink, parent_id, subreddit, post_title)
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             )?;

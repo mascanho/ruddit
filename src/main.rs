@@ -430,10 +430,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut db = database::adding::DB::new()?;
         db.create_tables()?;
         db.append_results(&posts)?;
-
-        for post in &posts {
-            println!("{:#?}", post);
-        }
+        println!(
+            "Successfully appended {} new posts to database",
+            posts.len()
+        );
         return Ok(());
     }
 
@@ -512,7 +512,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut db = database::adding::DB::new()?;
             db.create_tables()?;
             db.append_results(&posts)?;
-
+            println!(
+                "Successfully appended {} new posts to database",
+                posts.len()
+            );
             // Also fetch and save comments for each post
             println!("Fetching comments for posts...");
             for post in &posts {
