@@ -128,8 +128,8 @@ enum RedditError {
 }
 
 impl From<reqwest::Error> for RedditError {
-    fn from(err: reqwest::Error) -> Self {
-        RedditError::Reqwest(err)
+    fn from(e: reqwest::Error) -> Self {
+        RedditError::Reqwest(e)
     }
 }
 
@@ -461,7 +461,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if args.export {
-        exports::excel::create_excel().expect("Failed to export csv")
+        match exports::excel::create_excel() {
+            Ok(_) => println!("Successfully exported data to Excel"),
+            Err(e) => eprintln!("Failed to export data: {}", e),
+        }
     } else if !args.export && !args.clear && !args.leads && !args.settings {
         // Only proceed if at least one argument is provided else use default values
         if args.subreddit.is_none() || args.subreddit.is_some() {
@@ -482,18 +485,65 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             db.create_tables()?;
             db.append_results(&posts)?;
 
-            println!("Done!");
+            // Also fetch and save comments for each post
+            println!("Fetching comments for posts...");
+            for post in &posts {
+                if let Ok(post_comments) = get_post_comments(&token, &post.id.to_string()).await {
+                    if let Some(post_data) = post_comments.first() {
+                        if let RedditData::Post(post_info) = &post_data.data.children[0].data {
+                            let comments = post_comments[1]
+                                .data
+                                .children
+                                .iter()
+                                .filter_map(|child| {
+                                    if let RedditData::Comment(comment) = &child.data {
+                                        Some(CommentDataWrapper {
+                                            id: comment.id.clone(),
+                                            post_id: post.id.to_string(),
+                                            body: comment.body.clone(),
+                                            author: comment.author.clone(),
+                                            timestamp: comment.created_utc as i64,
+                                            formatted_date: database::adding::DB::format_timestamp(
+                                                comment.created_utc as i64,
+                                            )
+                                            .expect("Failed to format timestamp"),
+                                            score: comment.score,
+                                            permalink: comment.permalink.clone(),
+                                            parent_id: comment.parent_id.clone(),
+                                            subreddit: post.subreddit.clone(),
+                                            post_title: post.title.clone(),
+                                        })
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect::<Vec<_>>();
+
+                            if !comments.is_empty() {
+                                db.create_comments_table()?;
+                                db.append_comments(&comments)?;
+                            }
+                        }
+                    }
+                }
+            }
+
+            println!("Done! Posts and comments saved to database.");
         } else {
             println!("No subreddit or relevance specified. Use --help for usage info.");
         }
     } else if args.leads {
-        let leads = ai::gemini::gemini_generate_leads()
-            .await
-            .expect("Failed to generate leads");
-
-        match serde_json::to_string_pretty(&leads) {
-            Ok(_) => return Ok(()),
-            Err(e) => eprintln!("Error pretty-printing JSON: {}", e),
+        println!("Analyzing posts and comments for leads...");
+        match ai::gemini::gemini_generate_leads().await {
+            Ok(_) => {
+                println!("Lead analysis completed successfully!");
+                println!("Results have been exported to Excel in the Reddit_data folder.");
+                return Ok(());
+            }
+            Err(e) => {
+                eprintln!("Failed to generate leads: {}", e);
+                return Ok(());
+            }
         }
     }
 

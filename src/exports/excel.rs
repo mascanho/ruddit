@@ -1,17 +1,14 @@
 use std::fs;
 
-use crate::database::{
-    self,
-    adding::{CommentDataWrapper, PostDataWrapper},
-};
+use crate::database::adding::{CommentDataWrapper, DB, PostDataWrapper};
 use chrono::Local;
 use directories::UserDirs;
-use rust_xlsxwriter::{Format, FormatAlign, Workbook, XlsxError};
-use serde_json::Value;
+use rust_xlsxwriter::{Format, FormatAlign, Workbook, Worksheet, XlsxError};
+use serde_json::{Map, Value};
 
 pub fn create_excel() -> Result<(), Box<dyn std::error::Error>> {
     // Get data from database with proper error handling
-    let db = database::adding::DB::new()?;
+    let db = DB::new()?;
     let data = db.get_db_results()?;
 
     let user_dirs = UserDirs::new().ok_or("Failed to get user directories")?;
@@ -30,14 +27,7 @@ pub fn create_excel() -> Result<(), Box<dyn std::error::Error>> {
     let header_format = Format::new().set_align(FormatAlign::Center).set_bold();
 
     // Write headers
-    let headers = [
-        // "Timestamp",
-        "Date",
-        "Title",
-        "URL",
-        "Relevance",
-        "Subreddit",
-    ];
+    let headers = ["Date", "Title", "URL", "Relevance", "Subreddit"];
 
     for (col, header) in headers.iter().enumerate() {
         worksheet.write_string_with_format(0, col as u16, *header, &header_format)?;
@@ -47,7 +37,6 @@ pub fn create_excel() -> Result<(), Box<dyn std::error::Error>> {
     for (row, result) in data.iter().enumerate() {
         let row_num = (row + 1) as u32;
         let cells = [
-            // result.timestamp.to_string(),
             result.formatted_date.clone(),
             result.title.clone(),
             result.url.clone(),
@@ -72,90 +61,172 @@ pub fn create_excel() -> Result<(), Box<dyn std::error::Error>> {
     let folder_name = "Reddit_data";
     let folder_path = desktop.join(folder_name);
 
+    // Create directory with better error handling
     if let Err(e) = fs::create_dir_all(&folder_path) {
-        eprintln!("Failed to create directory: {}", e);
-        return Err(e.into());
+        eprintln!("Failed to create directory {:?}: {}", folder_path, e);
+        return Err(Box::new(e));
     }
 
-    workbook.save(folder_path.join(filename.as_str()))?;
-
-    println!("Successfully exported to {:?}", desktop.join(folder_name));
+    // Try to save with explicit error handling
+    workbook
+        .save(folder_path.join(filename.as_str()))
+        .map_err(|e| {
+            eprintln!("Failed to save workbook to {:?}: {}", folder_path, e);
+            Box::new(e)
+        })?;
+    println!("Successfully exported to {:?}", folder_path);
     Ok(())
 }
 
 // Export the filtered data by the LLM into a .xlsx
-pub fn export_gemini_to_excel(gemini_data: &str) -> Result<(), XlsxError> {
-    let gemini_values: Vec<Value> = serde_json::from_str(gemini_data)
-        .or_else(|_| serde_json::from_str(gemini_data).map(|v: Value| vec![v]))
+pub fn export_gemini_to_excel(json_str: &str) -> Result<(), XlsxError> {
+    let gemini_values: Vec<Value> = serde_json::from_str(json_str)
+        .or_else(|_| serde_json::from_str(json_str).map(|v: Value| vec![v]))
         .expect("Failed to parse JSON as an array or a single object");
 
-    let user_dirs = UserDirs::new().ok_or_else(|| {
-        XlsxError::IoError(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "Failed to get user directories",
-        ))
-    })?;
-    let desktop = user_dirs.desktop_dir().ok_or_else(|| {
-        XlsxError::IoError(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "Failed to get desktop directory",
-        ))
-    })?;
-
-    println!("Exporting {} records to Excel", gemini_values.len());
-
+    // Create workbook
     let mut workbook = Workbook::new();
-    let worksheet = workbook.add_worksheet();
-    worksheet.set_name("Gemini Leads")?;
 
-    let header_format = Format::new().set_align(FormatAlign::Center).set_bold();
+    // Format for headers
+    let header_format = Format::new()
+        .set_bold()
+        .set_align(FormatAlign::Center)
+        .set_background_color("C6EFCE");
 
-    if let Some(first_item) = gemini_values.get(0) {
-        if let Some(obj) = first_item.as_object() {
-            let headers: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
-            for (col, header) in headers.iter().enumerate() {
-                worksheet.write_string_with_format(0, col as u16, *header, &header_format)?;
+    // Add and setup leads worksheet
+    let mut worksheet = workbook.add_worksheet();
+    worksheet.set_name("Leads")?;
+
+    // Write headers for leads sheet
+    worksheet.write_string_with_format(0, 0, "Title", &header_format)?;
+    worksheet.write_string_with_format(0, 1, "URL", &header_format)?;
+    worksheet.write_string_with_format(0, 2, "Date", &header_format)?;
+    worksheet.write_string_with_format(0, 3, "Relevance", &header_format)?;
+    worksheet.write_string_with_format(0, 4, "Subreddit", &header_format)?;
+    worksheet.write_string_with_format(0, 5, "Sentiment", &header_format)?;
+
+    // Write leads data
+    for (row, value) in gemini_values.iter().enumerate() {
+        let row = (row + 1) as u32;
+        if let Some(obj) = value.as_object() {
+            // Cache commonly used values
+            let title = obj
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let url = obj.get("url").and_then(|v| v.as_str()).unwrap_or_default();
+
+            worksheet.write_string(row, 0, title)?;
+            worksheet.write_string(row, 1, url)?;
+
+            if let Some(date) = obj.get("formatted_date").and_then(|v| v.as_str()) {
+                worksheet.write_string(row, 2, date)?;
+            }
+            if let Some(relevance) = obj.get("relevance").and_then(|v| v.as_str()) {
+                worksheet.write_string(row, 3, relevance)?;
+            }
+            if let Some(subreddit) = obj.get("subreddit").and_then(|v| v.as_str()) {
+                worksheet.write_string(row, 4, subreddit)?;
+            }
+            if let Some(sentiment) = obj.get("sentiment").and_then(|v| v.as_str()) {
+                worksheet.write_string(row, 5, sentiment)?;
+            }
+        }
+    }
+
+    // Set column widths for leads sheet
+    worksheet.set_column_width(0, 50)?; // Title
+    worksheet.set_column_width(1, 30)?; // URL
+    worksheet.set_column_width(2, 20)?; // Date
+    worksheet.set_column_width(3, 15)?; // Relevance
+    worksheet.set_column_width(4, 20)?; // Subreddit
+    worksheet.set_column_width(5, 15)?; // Sentiment
+
+    // Add and setup comments worksheet
+    worksheet = workbook.add_worksheet();
+    worksheet.set_name("Comments")?;
+
+    // Write headers for comments sheet
+    worksheet.write_string_with_format(0, 0, "Post Title", &header_format)?;
+    worksheet.write_string_with_format(0, 1, "Author", &header_format)?;
+    worksheet.write_string_with_format(0, 2, "Comment", &header_format)?;
+    worksheet.write_string_with_format(0, 3, "Sentiment", &header_format)?;
+    worksheet.write_string_with_format(0, 4, "URL", &header_format)?;
+
+    // Write data
+    for (row, value) in gemini_values.iter().enumerate() {
+        let row = (row + 1) as u32;
+        if let Some(obj) = value.as_object() {
+            // Cache commonly used values
+            let title = obj
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let url = obj.get("url").and_then(|v| v.as_str()).unwrap_or_default();
+
+            // Write to leads sheet
+            worksheet.write_string(row, 0, title)?;
+            worksheet.write_string(row, 1, url)?;
+
+            if let Some(date) = obj.get("formatted_date").and_then(|v| v.as_str()) {
+                worksheet.write_string(row, 2, date)?;
+            }
+            if let Some(relevance) = obj.get("relevance").and_then(|v| v.as_str()) {
+                worksheet.write_string(row, 3, relevance)?;
+            }
+            if let Some(subreddit) = obj.get("subreddit").and_then(|v| v.as_str()) {
+                worksheet.write_string(row, 4, subreddit)?;
+            }
+            if let Some(sentiment) = obj.get("sentiment").and_then(|v| v.as_str()) {
+                worksheet.write_string(row, 5, sentiment)?;
             }
 
-            for (row, value) in gemini_values.iter().enumerate() {
-                let row_num = (row + 1) as u32;
-                if let Some(obj) = value.as_object() {
-                    for (col, header) in headers.iter().enumerate() {
-                        let cell_value = obj.get(*header).and_then(|v| v.as_str()).unwrap_or("");
-                        worksheet.write_string(row_num, col as u16, cell_value)?;
+            // Write comments if they exist
+            if let Some(comments) = obj.get("top_comments").and_then(|v| v.as_array()) {
+                for (comment_idx, comment) in comments.iter().enumerate() {
+                    if let Some(comment_obj) = comment.as_object() {
+                        let comment_row = row + comment_idx as u32;
+
+                        worksheet.write_string(comment_row, 0, title)?;
+
+                        if let Some(author) = comment_obj.get("author").and_then(|v| v.as_str()) {
+                            worksheet.write_string(comment_row, 1, author)?;
+                        }
+                        if let Some(text) = comment_obj.get("text").and_then(|v| v.as_str()) {
+                            worksheet.write_string(comment_row, 2, text)?;
+                        }
+                        if let Some(sentiment) =
+                            comment_obj.get("sentiment").and_then(|v| v.as_str())
+                        {
+                            worksheet.write_string(comment_row, 3, sentiment)?;
+                        }
+                        worksheet.write_string(comment_row, 4, url)?;
                     }
                 }
             }
         }
     }
 
-    worksheet.autofit();
+    {
+        // Set column widths for leads sheet
+        worksheet.set_column_width(0, 50)?; // Title
+        worksheet.set_column_width(1, 30)?; // URL
+        worksheet.set_column_width(2, 20)?; // Date
+        worksheet.set_column_width(3, 15)?; // Relevance
+        worksheet.set_column_width(4, 20)?; // Subreddit
+        worksheet.set_column_width(5, 15)?; // Sentiment
+    }
 
-    let filename = format!(
-        "Ruddit_leads_{}.xlsx",
-        Local::now().format("%d-%m-%Y_%H-%M-%S")
-    );
-    let folder_name = "Reddit_data";
-    let folder_path = desktop.join(folder_name);
+    {
+        // Set column widths for comments sheet
+        worksheet.set_column_width(0, 50)?; // Post Title
+        worksheet.set_column_width(1, 20)?; // Author
+        worksheet.set_column_width(2, 100)?; // Comment
+        worksheet.set_column_width(3, 15)?; // Sentiment
+        worksheet.set_column_width(4, 30)?; // URL
+    }
 
-    fs::create_dir_all(&folder_path).map_err(|e| XlsxError::IoError(e))?;
-
-    let save_path = folder_path.join(&filename);
-    workbook.save(&save_path)?;
-
-    println!("Successfully exported to {:?}", save_path);
-    Ok(())
-}
-
-// Function to export comments from the database to Excel
-pub fn export_comments_from_db(post_id: &str) -> Result<(), XlsxError> {
-    let db = database::adding::DB::new()
-        .map_err(|e| XlsxError::IoError(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
-
-    let comments = db
-        .get_post_comments(post_id)
-        .map_err(|e| XlsxError::IoError(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
-
+    // Get user's desktop directory
     let user_dirs = UserDirs::new().ok_or_else(|| {
         XlsxError::IoError(std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -170,24 +241,72 @@ pub fn export_comments_from_db(post_id: &str) -> Result<(), XlsxError> {
         ))
     })?;
 
+    // Create output directory and save file
+    let folder_name = "Reddit_data";
+    let filename = format!(
+        "Ruddit_leads_{}.xlsx",
+        Local::now().format("%d-%m-%Y_%H-%M-%S")
+    );
+
+    let folder_path = desktop.join(folder_name);
+    // Create directory with better error handling
+    if let Err(e) = fs::create_dir_all(&folder_path) {
+        eprintln!("Failed to create directory {:?}: {}", folder_path, e);
+        return Err(XlsxError::IoError(e));
+    }
+
+    let save_path = folder_path.join(&filename);
+    workbook.save(&save_path).map_err(|e| {
+        eprintln!("Failed to save workbook to {:?}: {}", save_path, e);
+        e
+    })?;
+    println!("Successfully exported to {:?}", save_path);
+    Ok(())
+}
+
+// Function to export comments for a specific post
+pub fn export_comments_from_db(post_id: &str) -> Result<(), XlsxError> {
+    // Get comments from database
+    let db = DB::new()
+        .map_err(|e| XlsxError::IoError(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+
+    let comments = db
+        .get_post_comments(post_id)
+        .map_err(|e| XlsxError::IoError(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+
     println!("Exporting {} comments to Excel", comments.len());
 
+    // Create workbook and worksheet
     let mut workbook = Workbook::new();
     let mut worksheet = workbook.add_worksheet();
 
-    // Add headers with formatting
-    let header_format = Format::new()
-        .set_bold()
-        .set_align(FormatAlign::Center)
-        .set_background_color("C6EFCE");
+    // Set up headers with formatting
+    let header_format = Format::new().set_align(FormatAlign::Center).set_bold();
 
-    worksheet.write_string_with_format(0, 0, "Subreddit", &header_format)?;
-    worksheet.write_string_with_format(0, 1, "Post Title", &header_format)?;
-    worksheet.write_string_with_format(0, 2, "Author", &header_format)?;
-    worksheet.write_string_with_format(0, 3, "Comment", &header_format)?;
-    worksheet.write_string_with_format(0, 4, "Score", &header_format)?;
-    worksheet.write_string_with_format(0, 5, "Date", &header_format)?;
-    worksheet.write_string_with_format(0, 6, "Link", &header_format)?;
+    let headers = [
+        "Subreddit",
+        "Post Title",
+        "Author",
+        "Comment",
+        "Score",
+        "Date",
+        "Link",
+    ];
+    for (col, header) in headers.iter().enumerate() {
+        worksheet.write_string_with_format(0, col as u16, *header, &header_format)?;
+    }
+
+    // Write comment data
+    for (idx, comment) in comments.iter().enumerate() {
+        let row = (idx + 1) as u32;
+        worksheet.write_string(row, 0, &comment.subreddit)?;
+        worksheet.write_string(row, 1, &comment.post_id)?;
+        worksheet.write_string(row, 2, &comment.author)?;
+        worksheet.write_string(row, 3, &comment.body)?;
+        worksheet.write_number(row, 4, comment.score as f64)?;
+        worksheet.write_string(row, 5, &comment.formatted_date)?;
+        worksheet.write_string(row, 6, &format!("https://reddit.com{}", comment.permalink))?;
+    }
 
     // Set column widths
     worksheet.set_column_width(0, 20)?; // Subreddit
@@ -198,17 +317,20 @@ pub fn export_comments_from_db(post_id: &str) -> Result<(), XlsxError> {
     worksheet.set_column_width(5, 20)?; // Date
     worksheet.set_column_width(6, 50)?; // Link
 
-    // Write data
-    for (row, comment) in comments.iter().enumerate() {
-        let row = row as u32 + 1; // Skip header row
-        worksheet.write_string(row, 0, &comment.subreddit)?;
-        worksheet.write_string(row, 1, &comment.post_title)?;
-        worksheet.write_string(row, 2, &comment.author)?;
-        worksheet.write_string(row, 3, &comment.body)?;
-        worksheet.write_number(row, 4, comment.score as f64)?;
-        worksheet.write_string(row, 5, &comment.formatted_date)?;
-        worksheet.write_string(row, 6, &format!("https://reddit.com{}", comment.permalink))?;
-    }
+    // Save the workbook
+    let user_dirs = UserDirs::new().ok_or_else(|| {
+        XlsxError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Failed to get user directories",
+        ))
+    })?;
+
+    let desktop = user_dirs.desktop_dir().ok_or_else(|| {
+        XlsxError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Failed to get desktop directory",
+        ))
+    })?;
 
     let folder_name = "Reddit_data";
     let filename = format!(
@@ -218,15 +340,22 @@ pub fn export_comments_from_db(post_id: &str) -> Result<(), XlsxError> {
     );
 
     let folder_path = desktop.join(folder_name);
-    fs::create_dir_all(&folder_path).map_err(|e| XlsxError::IoError(e))?;
+    // Create directory with better error handling
+    if let Err(e) = fs::create_dir_all(&folder_path) {
+        eprintln!("Failed to create directory {:?}: {}", folder_path, e);
+        return Err(XlsxError::IoError(e));
+    }
 
     let save_path = folder_path.join(format!("{}.xlsx", filename));
-    workbook.save(&save_path)?;
-
-    println!("Successfully exported comments to {:?}", save_path);
+    workbook.save(&save_path).map_err(|e| {
+        eprintln!("Failed to save workbook to {:?}: {}", save_path, e);
+        e
+    })?;
+    println!("Successfully exported to {:?}", save_path);
     Ok(())
 }
 
 // Function to export the leads that are generated from the LLM
-// This happens when the user passes the -l or -lead flag
-pub async fn export_leads_with_gemini(_data: &str) {}
+pub async fn export_leads_with_gemini(data: &str) -> Result<(), XlsxError> {
+    export_gemini_to_excel(data)
+}

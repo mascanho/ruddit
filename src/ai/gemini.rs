@@ -199,6 +199,23 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
 
     println!("Matching Keywords: {}", &keywords);
 
+    // Initialize database connection for both posts and comments
+    let db = database::adding::DB::new()
+        .map_err(|e| GeminiError::DatabaseError(format!("Failed to connect to DB: {}", e)))?;
+
+    // Get data from database
+    let posts = db
+        .get_db_results()
+        .map_err(|e| GeminiError::DatabaseError(format!("Failed to get posts: {}", e)))?;
+
+    // Get all comments for these posts
+    let mut all_comments = Vec::new();
+    for post in &posts {
+        if let Ok(comments) = db.get_post_comments(&post.id.to_string()) {
+            all_comments.extend(comments);
+        }
+    }
+
     // Get sentiment requirements
     let sentiments = settings.api_keys.SENTIMENT.join(" OR ");
     let match_type = settings.api_keys.MATCH.to_lowercase();
@@ -254,7 +271,7 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
 
         let system_prompt = if attempts > 1 {
             format!(
-                "You are a lead generation AI. Analyze the following data: {}
+                "You are a lead generation AI. Analyze the following data strictly: {}
 
         REQUIREMENTS:
         1. Return ONLY a valid JSON array of objects
@@ -265,49 +282,39 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
            - relevance: HIGH, MEDIUM, or LOW based on lead quality
            - subreddit: subreddit name
            - sentiment: detected sentiment (positive, negative, neutral)
-        3. Follow these rules:
-           - Use proper JSON format with double quotes
-           - No text outside the JSON
-           - No markdown code blocks
-           - ONLY include posts matching the query criteria
+           - engagement_score: HIGH/MEDIUM/LOW
 
-        Example:
-        [{{
-          \"formatted_date\": \"2024-08-18\",
-          \"title\": \"Looking for enterprise CRM recommendations\",
-          \"url\": \"https://reddit.com/r/sales/...\",
-          \"relevance\": \"HIGH\",
-          \"subreddit\": \"sales\",
-          \"sentiment\": \"neutral\"
-        }}]",
+        Follow these rules:
+        - Use proper JSON format with double quotes
+        - No text outside the JSON
+        - No markdown code blocks
+        - ONLY include posts matching the query criteria",
                 json_reddits
             )
         } else {
+            let combined_data = serde_json::json!({
+                "posts": reddits,
+                "comments": all_comments
+            });
+
             format!(
-                "You are a lead generation AI. Analyze this data: {}
+                "You are a lead generation AI analyzing posts and comments. Analyze this data: {}
 
-        OUTPUT REQUIREMENTS:
-        1. Return ONLY a JSON array
-        2. Each object needs:
-           - formatted_date: post date
-           - title: post title
-           - url: post URL
-           - relevance: HIGH/MEDIUM/LOW
-           - subreddit: subreddit name
-           - sentiment: detected sentiment
-        3. Include ONLY matching posts
-        4. Use proper JSON format
+                STRICT OUTPUT REQUIREMENTS:
+                1. Return ONLY a valid JSON array of objects
+                2. Each object MUST have:
+                   - formatted_date: post date (YYYY-MM-DD)
+                   - title: exact post title
+                   - url: full post URL
+                   - relevance: HIGH/MEDIUM/LOW for lead quality
+                   - subreddit: subreddit name
+                   - sentiment: detected sentiment
+                   - top_comments: array of up to 3 most relevant comments
+                   - comment_sentiment: overall comment sentiment
+                   - engagement_score: HIGH/MEDIUM/LOW based on interaction
 
-        Example:
-        [{{
-          \"formatted_date\": \"2024-08-18\",
-          \"title\": \"Need enterprise CRM suggestions\",
-          \"url\": \"https://reddit.com/r/sales/...\",
-          \"relevance\": \"HIGH\",
-          \"subreddit\": \"sales\",
-          \"sentiment\": \"neutral\"
-        }}]",
-                json_reddits
+                NO text outside JSON. NO markdown blocks.",
+                serde_json::to_string(&combined_data).unwrap_or_default()
             )
         };
 
