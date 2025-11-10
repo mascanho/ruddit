@@ -1,6 +1,9 @@
 use std::fs;
 
-use crate::database::{self, adding::PostDataWrapper};
+use crate::database::{
+    self,
+    adding::{CommentDataWrapper, PostDataWrapper},
+};
 use chrono::Local;
 use directories::UserDirs;
 use rust_xlsxwriter::{Format, FormatAlign, Workbook, XlsxError};
@@ -141,6 +144,80 @@ pub fn export_gemini_to_excel(gemini_data: &str) -> Result<(), XlsxError> {
     workbook.save(&save_path)?;
 
     println!("Successfully exported to {:?}", save_path);
+    Ok(())
+}
+
+// Function to export comments from the database to Excel
+pub fn export_comments_from_db(post_id: &str) -> Result<(), XlsxError> {
+    let db = database::adding::DB::new()
+        .map_err(|e| XlsxError::IoError(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+
+    let comments = db
+        .get_post_comments(post_id)
+        .map_err(|e| XlsxError::IoError(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+
+    let user_dirs = UserDirs::new().ok_or_else(|| {
+        XlsxError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Failed to get user directories",
+        ))
+    })?;
+
+    let desktop = user_dirs.desktop_dir().ok_or_else(|| {
+        XlsxError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Failed to get desktop directory",
+        ))
+    })?;
+
+    println!("Exporting {} comments to Excel", comments.len());
+
+    let mut workbook = Workbook::new();
+    let mut worksheet = workbook.add_worksheet();
+
+    // Add headers with formatting
+    let header_format = Format::new()
+        .set_bold()
+        .set_align(FormatAlign::Center)
+        .set_background_color("C6EFCE");
+
+    worksheet.write_string_with_format(0, 0, "Author", &header_format)?;
+    worksheet.write_string_with_format(0, 1, "Comment", &header_format)?;
+    worksheet.write_string_with_format(0, 2, "Score", &header_format)?;
+    worksheet.write_string_with_format(0, 3, "Date", &header_format)?;
+    worksheet.write_string_with_format(0, 4, "Link", &header_format)?;
+
+    // Set column widths
+    worksheet.set_column_width(0, 20)?; // Author
+    worksheet.set_column_width(1, 100)?; // Comment
+    worksheet.set_column_width(2, 10)?; // Score
+    worksheet.set_column_width(3, 20)?; // Date
+    worksheet.set_column_width(4, 50)?; // Link
+
+    // Write data
+    for (row, comment) in comments.iter().enumerate() {
+        let row = row as u32 + 1; // Skip header row
+        worksheet.write_string(row, 0, &comment.author)?;
+        worksheet.write_string(row, 1, &comment.body)?;
+        worksheet.write_number(row, 2, comment.score as f64)?;
+        worksheet.write_string(row, 3, &comment.formatted_date)?;
+        worksheet.write_string(row, 4, &format!("https://reddit.com{}", comment.permalink))?;
+    }
+
+    let folder_name = "Reddit_data";
+    let filename = format!(
+        "Reddit_comments_{}_{}",
+        post_id,
+        Local::now().format("%d-%m-%Y_%H-%M-%S")
+    );
+
+    let folder_path = desktop.join(folder_name);
+    fs::create_dir_all(&folder_path).map_err(|e| XlsxError::IoError(e))?;
+
+    let save_path = folder_path.join(format!("{}.xlsx", filename));
+    workbook.save(&save_path)?;
+
+    println!("Successfully exported comments to {:?}", save_path);
     Ok(())
 }
 

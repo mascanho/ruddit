@@ -394,6 +394,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db.append_comments(&comment_wrappers)?;
 
         println!("\nComments saved to database!");
+
+        // Export comments to Excel if export flag is set
+        if args.export {
+            if let Err(e) = exports::excel::export_comments_from_db(&post_id) {
+                eprintln!("Failed to export comments to Excel: {}", e);
+            } else {
+                println!("Comments successfully exported to Excel!");
+            }
+        }
         return Ok(());
     }
 
