@@ -1,6 +1,5 @@
-use anyhow::{Context, Result};
-use gemini_rust::{Content, Gemini, Message, Role};
-use log::debug;
+use anyhow::Result;
+use gemini_rust::Gemini;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;

@@ -3,12 +3,11 @@ use base64::{Engine as _, engine::general_purpose};
 use clap::Parser;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::env::{self};
 
 use crate::{
     arguments::modeling::Args,
     database::adding::{CommentDataWrapper, PostDataWrapper},
-    settings::api_keys::{self, AppConfig},
+    settings::api_keys::AppConfig,
 };
 use std::process::Command;
 

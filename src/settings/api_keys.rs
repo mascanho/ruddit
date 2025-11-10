@@ -1,6 +1,6 @@
 use directories::{BaseDirs, UserDirs};
 use serde::{Deserialize, Serialize};
-use std::{fs, path::PathBuf};
+use std::fs;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ApiKeys {

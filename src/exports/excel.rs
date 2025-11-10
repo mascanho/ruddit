@@ -1,10 +1,10 @@
 use std::fs;
 
-use crate::database::adding::{CommentDataWrapper, DB, PostDataWrapper};
+use crate::database::adding::DB;
 use chrono::Local;
 use directories::UserDirs;
-use rust_xlsxwriter::{Format, FormatAlign, Workbook, Worksheet, XlsxError};
-use serde_json::{Map, Value};
+use rust_xlsxwriter::{Format, FormatAlign, Workbook, XlsxError};
+use serde_json::Value;
 
 pub fn create_excel() -> Result<(), Box<dyn std::error::Error>> {
     // Get data from database with proper error handling
@@ -246,7 +246,7 @@ pub fn export_comments_from_db(post_id: &str) -> Result<(), XlsxError> {
 
     // Create workbook and worksheet
     let mut workbook = Workbook::new();
-    let mut worksheet = workbook.add_worksheet();
+    let worksheet = workbook.add_worksheet();
 
     // Set up headers with formatting
     let header_format = Format::new().set_align(FormatAlign::Center).set_bold();
@@ -333,7 +333,7 @@ pub async fn export_comments_with_gemini(data: &str) -> Result<(), XlsxError> {
     let json_data: Value = serde_json::from_str(data).unwrap();
 
     let mut workbook = Workbook::new();
-    let mut worksheet = workbook.add_worksheet();
+    let worksheet = workbook.add_worksheet();
     worksheet.set_name("Comments")?;
 
     let header_format = Format::new()
