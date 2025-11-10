@@ -181,27 +181,33 @@ pub fn export_comments_from_db(post_id: &str) -> Result<(), XlsxError> {
         .set_align(FormatAlign::Center)
         .set_background_color("C6EFCE");
 
-    worksheet.write_string_with_format(0, 0, "Author", &header_format)?;
-    worksheet.write_string_with_format(0, 1, "Comment", &header_format)?;
-    worksheet.write_string_with_format(0, 2, "Score", &header_format)?;
-    worksheet.write_string_with_format(0, 3, "Date", &header_format)?;
-    worksheet.write_string_with_format(0, 4, "Link", &header_format)?;
+    worksheet.write_string_with_format(0, 0, "Subreddit", &header_format)?;
+    worksheet.write_string_with_format(0, 1, "Post Title", &header_format)?;
+    worksheet.write_string_with_format(0, 2, "Author", &header_format)?;
+    worksheet.write_string_with_format(0, 3, "Comment", &header_format)?;
+    worksheet.write_string_with_format(0, 4, "Score", &header_format)?;
+    worksheet.write_string_with_format(0, 5, "Date", &header_format)?;
+    worksheet.write_string_with_format(0, 6, "Link", &header_format)?;
 
     // Set column widths
-    worksheet.set_column_width(0, 20)?; // Author
-    worksheet.set_column_width(1, 100)?; // Comment
-    worksheet.set_column_width(2, 10)?; // Score
-    worksheet.set_column_width(3, 20)?; // Date
-    worksheet.set_column_width(4, 50)?; // Link
+    worksheet.set_column_width(0, 20)?; // Subreddit
+    worksheet.set_column_width(1, 50)?; // Post Title
+    worksheet.set_column_width(2, 20)?; // Author
+    worksheet.set_column_width(3, 100)?; // Comment
+    worksheet.set_column_width(4, 10)?; // Score
+    worksheet.set_column_width(5, 20)?; // Date
+    worksheet.set_column_width(6, 50)?; // Link
 
     // Write data
     for (row, comment) in comments.iter().enumerate() {
         let row = row as u32 + 1; // Skip header row
-        worksheet.write_string(row, 0, &comment.author)?;
-        worksheet.write_string(row, 1, &comment.body)?;
-        worksheet.write_number(row, 2, comment.score as f64)?;
-        worksheet.write_string(row, 3, &comment.formatted_date)?;
-        worksheet.write_string(row, 4, &format!("https://reddit.com{}", comment.permalink))?;
+        worksheet.write_string(row, 0, &comment.subreddit)?;
+        worksheet.write_string(row, 1, &comment.post_title)?;
+        worksheet.write_string(row, 2, &comment.author)?;
+        worksheet.write_string(row, 3, &comment.body)?;
+        worksheet.write_number(row, 4, comment.score as f64)?;
+        worksheet.write_string(row, 5, &comment.formatted_date)?;
+        worksheet.write_string(row, 6, &format!("https://reddit.com{}", comment.permalink))?;
     }
 
     let folder_name = "Reddit_data";

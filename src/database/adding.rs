@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use directories::BaseDirs;
 use rusqlite::{Connection, Result as RusqliteResult, params};
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,8 @@ pub struct CommentDataWrapper {
     pub score: i32,
     pub permalink: String,
     pub parent_id: String,
+    pub subreddit: String,
+    pub post_title: String,
 }
 
 pub struct DB {
@@ -37,13 +39,20 @@ pub struct DB {
 
 impl DB {
     pub fn new() -> RusqliteResult<Self> {
-        let base_dirs = BaseDirs::new().ok_or_else(|| {
-            rusqlite::Error::InvalidPath(PathBuf::from("Failed to get base directories"))
-        })?;
+        let base_dirs = BaseDirs::new().ok_or(rusqlite::Error::InvalidPath(PathBuf::from(
+            "Failed to get base directories",
+        )))?;
 
-        let app_dir = base_dirs.config_dir().join("ruddit");
-        std::fs::create_dir_all(&app_dir)
-            .map_err(|e| rusqlite::Error::InvalidPath(app_dir.clone()))?;
+        let app_dir = base_dirs.data_dir().join("ruddit");
+
+        if !app_dir.exists() {
+            std::fs::create_dir_all(&app_dir).map_err(|e| {
+                rusqlite::Error::InvalidPath(PathBuf::from(format!(
+                    "Failed to create directory: {}",
+                    e
+                )))
+            })?;
+        }
 
         let db_path = app_dir.join("ruddit.db");
         let conn = Connection::open(db_path)?;
@@ -74,6 +83,10 @@ impl DB {
     }
 
     pub fn create_comments_table(&self) -> RusqliteResult<()> {
+        // Drop and recreate the table with all columns
+        self.conn
+            .execute("DROP TABLE IF EXISTS reddit_comments", [])?;
+
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS reddit_comments (
                 id TEXT PRIMARY KEY,
@@ -84,10 +97,13 @@ impl DB {
                 formatted_date TEXT NOT NULL,
                 score INTEGER NOT NULL,
                 permalink TEXT NOT NULL,
-                parent_id TEXT NOT NULL
+                parent_id TEXT NOT NULL,
+                subreddit TEXT NOT NULL,
+                post_title TEXT NOT NULL
             )",
             [],
         )?;
+
         Ok(())
     }
 
@@ -125,8 +141,8 @@ impl DB {
         {
             let mut stmt = tx.prepare(
                 "INSERT OR REPLACE INTO reddit_comments
-                (id, post_id, body, author, timestamp, formatted_date, score, permalink, parent_id)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                (id, post_id, body, author, timestamp, formatted_date, score, permalink, parent_id, subreddit, post_title)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             )?;
 
             for comment in comments {
@@ -139,7 +155,9 @@ impl DB {
                     comment.formatted_date,
                     comment.score,
                     comment.permalink,
-                    comment.parent_id
+                    comment.parent_id,
+                    comment.subreddit,
+                    comment.post_title
                 ])?;
             }
         }
@@ -176,7 +194,7 @@ impl DB {
 
     pub fn get_post_comments(&self, post_id: &str) -> RusqliteResult<Vec<CommentDataWrapper>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, post_id, body, author, timestamp, formatted_date, score, permalink, parent_id
+            "SELECT id, post_id, body, author, timestamp, formatted_date, score, permalink, parent_id, subreddit, post_title
              FROM reddit_comments
              WHERE post_id = ?1
              ORDER BY timestamp DESC",
@@ -194,6 +212,8 @@ impl DB {
                     score: row.get(6)?,
                     permalink: row.get(7)?,
                     parent_id: row.get(8)?,
+                    subreddit: row.get(9)?,
+                    post_title: row.get(10)?,
                 })
             })?
             .collect::<RusqliteResult<Vec<_>>>()?;
@@ -202,11 +222,13 @@ impl DB {
     }
 
     pub fn format_timestamp(timestamp: i64) -> RusqliteResult<String> {
-        let naive_datetime = NaiveDateTime::from_timestamp_opt(timestamp, 0).ok_or(
-            rusqlite::Error::InvalidParameterName("Invalid timestamp".to_string()),
-        )?;
+        let naive_datetime = DateTime::from_timestamp(timestamp, 0)
+            .ok_or(rusqlite::Error::InvalidParameterName(
+                "Invalid timestamp".to_string(),
+            ))?
+            .naive_utc();
 
-        let datetime: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
+        let datetime: DateTime<Utc> = naive_datetime.and_utc();
         Ok(datetime.format("%Y-%m-%d %H:%M:%S").to_string())
     }
 

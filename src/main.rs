@@ -1,5 +1,5 @@
 use base64::{Engine as _, engine::general_purpose};
-use chrono::NaiveDateTime;
+
 use clap::Parser;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,7 @@ pub mod database;
 pub mod exports;
 pub mod settings;
 
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct RedditPost {
     id: String,
     title: String,
@@ -26,17 +26,25 @@ struct RedditPost {
     created_utc: f64,
     subreddit: String,
     permalink: String,
+    selftext: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
+enum RedditData {
+    Post(RedditPost),
+    Comment(RedditComment),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct RedditComment {
-    id: Option<String>,
-    body: Option<String>,
-    author: Option<String>,
-    created_utc: Option<f64>,
-    score: Option<i32>,
-    permalink: Option<String>,
-    parent_id: Option<String>,
+    id: String,
+    body: String,
+    author: String,
+    created_utc: f64,
+    score: i32,
+    permalink: String,
+    parent_id: String,
     #[serde(default)]
     replies: serde_json::Value,
 }
@@ -65,20 +73,20 @@ mod reply_format {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 struct RedditListingData {
     children: Vec<RedditListingChild>,
     after: Option<String>,
     before: Option<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 struct RedditListingChild {
     kind: String,
-    data: RedditPost,
+    data: RedditData,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 struct RedditListing {
     kind: String,
     data: RedditListingData,
@@ -195,15 +203,38 @@ async fn get_subreddit_posts(
         .children
         .into_iter()
         .map(|child| PostDataWrapper {
-            id: child.data.id.parse().unwrap_or(0),
-            title: child.data.title,
-            url: child.data.url,
-            timestamp: child.data.created_utc as i64,
-            formatted_date: database::adding::DB::format_timestamp(child.data.created_utc as i64)
-                .expect("Failed to format timestamp"),
+            id: match &child.data {
+                RedditData::Post(post) => post.id.parse().unwrap_or(0),
+                _ => 0,
+            },
+            title: match &child.data {
+                RedditData::Post(post) => post.title.clone(),
+                _ => String::new(),
+            },
+            url: match &child.data {
+                RedditData::Post(post) => post.url.clone(),
+                _ => String::new(),
+            },
+            timestamp: match &child.data {
+                RedditData::Post(post) => post.created_utc as i64,
+                _ => 0,
+            },
+            formatted_date: match &child.data {
+                RedditData::Post(post) => {
+                    database::adding::DB::format_timestamp(post.created_utc as i64)
+                        .expect("Failed to format timestamp")
+                }
+                _ => String::new(),
+            },
             relevance: relevance.to_string(),
-            subreddit: child.data.subreddit,
-            permalink: child.data.permalink,
+            subreddit: match &child.data {
+                RedditData::Post(post) => post.subreddit.clone(),
+                _ => String::new(),
+            },
+            permalink: match &child.data {
+                RedditData::Post(post) => post.permalink.clone(),
+                _ => String::new(),
+            },
         })
         .collect();
 
@@ -217,7 +248,7 @@ async fn get_subreddit_posts(
 async fn get_post_comments(
     access_token: &str,
     post_id: &str,
-) -> Result<Vec<RedditComment>, RedditError> {
+) -> Result<Vec<RedditListing>, RedditError> {
     let client = Client::new();
     let url = format!("https://oauth.reddit.com/comments/{}", post_id);
 
@@ -228,42 +259,14 @@ async fn get_post_comments(
         .send()
         .await?;
 
-    let response_text = response.text().await?;
+    let listings: Vec<RedditListing> = response.json().await?;
 
-    let listings = match serde_json::from_str::<Vec<CommentListing>>(&response_text) {
-        Ok(parsed) => {
-            if let Ok(pretty) = serde_json::to_string_pretty(&parsed) {
-                println!("\nSuccessfully parsed response:\n{}\n", pretty);
-            }
-            parsed
-        }
-        Err(e) => {
-            println!("\nError parsing response: {}", e);
-            println!("\nRaw response:\n{}", &response_text);
-            return Err(RedditError::TokenExtraction);
-        }
-    };
-
-    // The comments are in the second listing (index 1)
-    if listings.len() > 1 {
-        let comments = listings[1]
-            .data
-            .children
-            .iter()
-            .filter_map(|child| {
-                let comment = child.data.clone();
-                if comment.id.is_some() {
-                    Some(comment)
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        Ok(comments)
-    } else {
-        Ok(Vec::new())
+    if listings.len() < 2 {
+        println!("Warning: Unexpected response format");
+        return Ok(Vec::new());
     }
+
+    Ok(listings)
 }
 
 async fn search_subreddit_posts(
@@ -290,16 +293,22 @@ async fn search_subreddit_posts(
         .data
         .children
         .into_iter()
-        .map(|child| PostDataWrapper {
-            id: child.data.id.parse().unwrap_or(0),
-            title: child.data.title,
-            url: child.data.url,
-            timestamp: child.data.created_utc as i64,
-            formatted_date: database::adding::DB::format_timestamp(child.data.created_utc as i64)
-                .expect("Failed to format timestamp"),
-            relevance: relevance.to_string(),
-            subreddit: child.data.subreddit,
-            permalink: child.data.permalink,
+        .filter_map(|child| {
+            if let RedditData::Post(post) = &child.data {
+                Some(PostDataWrapper {
+                    id: post.id.parse().unwrap_or(0),
+                    title: post.title.clone(),
+                    url: post.url.clone(),
+                    timestamp: post.created_utc as i64,
+                    formatted_date: database::adding::DB::format_timestamp(post.created_utc as i64)
+                        .expect("Failed to format timestamp"),
+                    relevance: relevance.to_string(),
+                    subreddit: post.subreddit.clone(),
+                    permalink: post.permalink.clone(),
+                })
+            } else {
+                None
+            }
         })
         .collect();
 
@@ -350,27 +359,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(post_id) = args.comments {
         println!("Fetching comments for post {}...", post_id);
 
-        let comments = get_post_comments(&token, &post_id)
+        let post_details = get_post_comments(&token, &post_id)
             .await
             .expect("Failed to retrieve comments");
 
+        // Extract post title and subreddit from the first listing
+        let post_data = match &post_details[0].data.children[0].data {
+            RedditData::Post(post) => post,
+            _ => panic!("Expected post data"),
+        };
+        let post_title = post_data.title.clone();
+        let subreddit = post_data.subreddit.clone();
+
+        // Get comments from second listing
+        let comments = post_details[1]
+            .data
+            .children
+            .iter()
+            .filter_map(|child| {
+                if let RedditData::Comment(comment) = &child.data {
+                    Some(comment.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
         // Convert to CommentDataWrapper
         let comment_wrappers: Vec<CommentDataWrapper> = comments
-            .into_iter()
-            .take(args.comment_limit)
+            .iter()
             .map(|comment| CommentDataWrapper {
-                id: comment.id.unwrap_or_default(),
+                id: comment.id.clone(),
                 post_id: post_id.clone(),
-                body: comment.body.unwrap_or_default(),
-                author: comment.author.unwrap_or_default(),
-                timestamp: comment.created_utc.unwrap_or_default() as i64,
-                formatted_date: database::adding::DB::format_timestamp(
-                    comment.created_utc.unwrap_or_default() as i64,
-                )
-                .expect("Failed to format timestamp"),
-                score: comment.score.unwrap_or_default(),
-                permalink: comment.permalink.unwrap_or_default(),
-                parent_id: comment.parent_id.unwrap_or_default(),
+                body: comment.body.clone(),
+                author: comment.author.clone(),
+                timestamp: comment.created_utc as i64,
+                formatted_date: database::adding::DB::format_timestamp(comment.created_utc as i64)
+                    .expect("Failed to format timestamp"),
+                score: comment.score,
+                permalink: comment.permalink.clone(),
+                parent_id: comment.parent_id.clone(),
+                subreddit: subreddit.clone(),
+                post_title: post_title.clone(),
             })
             .collect();
 
@@ -379,6 +409,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Print comments in a readable format
         for (i, comment) in comment_wrappers.iter().enumerate() {
             println!("\nComment #{}", i + 1);
+            println!("Subreddit: r/{}", comment.subreddit);
+            println!("Post: {}", comment.post_title);
             println!("Author: u/{}", comment.author);
             println!("Score: {} points", comment.score);
             println!("Posted: {}", comment.formatted_date);
