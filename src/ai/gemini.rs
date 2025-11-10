@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
 use std::io::Write;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -199,9 +199,26 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
 
     println!("Matching Keywords: {}", &keywords);
 
+    // Get sentiment requirements
+    let sentiments = settings.api_keys.SENTIMENT.join(" OR ");
+    let match_type = settings.api_keys.MATCH.to_lowercase();
+    let match_operator = if match_type == "and" { "AND" } else { "OR" };
+
     let question = format!(
-        "given the keyword(s) {}, find relevant leads where the keywords are found in the title only.  ",
-        keywords
+        "Analyze the following posts and return ONLY those that match these criteria:
+        1. Keywords ({}) must be found in the title using {} matching
+        2. The post sentiment should match one of: {}
+        3. Return ONLY posts that are likely to be leads or business opportunities.
+
+        Format each result as a JSON object with fields:
+        - title: the post title
+        - url: the post URL
+        - formatted_date: the post date
+        - relevance: HIGH if it's a strong lead, MEDIUM if potential, LOW if uncertain
+        - subreddit: the subreddit name
+        - sentiment: the detected sentiment
+        ",
+        keywords, match_operator, sentiments
     );
 
     // Initialize database connection
@@ -237,24 +254,61 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
 
         let system_prompt = if attempts > 1 {
             format!(
-        "Given the following data: {}. You are a structured data generator. \
-        Your ONLY response should be a VALID JSON array of objects. Each object should contain 'formatted_date', 'title', 'url', 'relevance' and 'subreddit' keys. \
-        The JSON must be properly formatted with double quotes for property names and strings. \
-        Do NOT include any other text, explanations, or conversational phrases outside the JSON. \
-        Do NOT wrap the JSON in markdown code blocks. Output ONLY the raw JSON. \
-        Example of acceptable response: [{{\"formatted_date\": \"2024-08-18\", \"title\": \"Looking for a new CRM\", \"url\": \"https://example.com\", \"relevance\": \"High\", \"subreddit\": \"r/sales\"}}] \
-        json_reddits",
-        json_reddits
-    )
+                "You are a lead generation AI. Analyze the following data: {}
+
+        REQUIREMENTS:
+        1. Return ONLY a valid JSON array of objects
+        2. Each object MUST have these fields:
+           - formatted_date: post date (YYYY-MM-DD)
+           - title: exact post title
+           - url: full post URL
+           - relevance: HIGH, MEDIUM, or LOW based on lead quality
+           - subreddit: subreddit name
+           - sentiment: detected sentiment (positive, negative, neutral)
+        3. Follow these rules:
+           - Use proper JSON format with double quotes
+           - No text outside the JSON
+           - No markdown code blocks
+           - ONLY include posts matching the query criteria
+
+        Example:
+        [{{
+          \"formatted_date\": \"2024-08-18\",
+          \"title\": \"Looking for enterprise CRM recommendations\",
+          \"url\": \"https://reddit.com/r/sales/...\",
+          \"relevance\": \"HIGH\",
+          \"subreddit\": \"sales\",
+          \"sentiment\": \"neutral\"
+        }}]",
+                json_reddits
+            )
         } else {
             format!(
-        "Given the following data: {}. You are a structured data generator. \
-        Your ONLY response should be a JSON array of objects. Each object should contain 'formatted_date', 'title', 'url', 'relevance' and 'subreddit' keys. \
-        Do not include any other text, explanations, or conversational phrases. \
-        Example of acceptable response: [{{\"formatted_date\": \"2024-08-18\", \"title\": \"Looking for a new CRM\", \"url\": \"https://example.com\", \"relevance\": \"High\", \"subreddit\": \"r/sales\"}}] \
-        json_reddits",
-        json_reddits
-    )
+                "You are a lead generation AI. Analyze this data: {}
+
+        OUTPUT REQUIREMENTS:
+        1. Return ONLY a JSON array
+        2. Each object needs:
+           - formatted_date: post date
+           - title: post title
+           - url: post URL
+           - relevance: HIGH/MEDIUM/LOW
+           - subreddit: subreddit name
+           - sentiment: detected sentiment
+        3. Include ONLY matching posts
+        4. Use proper JSON format
+
+        Example:
+        [{{
+          \"formatted_date\": \"2024-08-18\",
+          \"title\": \"Need enterprise CRM suggestions\",
+          \"url\": \"https://reddit.com/r/sales/...\",
+          \"relevance\": \"HIGH\",
+          \"subreddit\": \"sales\",
+          \"sentiment\": \"neutral\"
+        }}]",
+                json_reddits
+            )
         };
 
         log::debug!("Attempt {} - System prompt: {}", attempts, system_prompt);

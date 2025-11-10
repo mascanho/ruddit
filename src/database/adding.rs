@@ -62,6 +62,9 @@ impl DB {
 
     pub fn create_tables(&self) -> RusqliteResult<()> {
         // Create posts table
+        // Drop and recreate posts table to ensure correct schema
+        self.conn.execute("DROP TABLE IF EXISTS reddit_posts", [])?;
+
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS reddit_posts (
                 id INTEGER PRIMARY KEY,
@@ -69,9 +72,9 @@ impl DB {
                 formatted_date TEXT NOT NULL,
                 title TEXT NOT NULL,
                 url TEXT UNIQUE NOT NULL,
-                relevance TEXT,
-                subreddit TEXT,
-                permalink TEXT
+                relevance TEXT NOT NULL DEFAULT '',
+                subreddit TEXT NOT NULL DEFAULT '',
+                permalink TEXT NOT NULL DEFAULT ''
             )",
             [],
         )?;
@@ -112,7 +115,7 @@ impl DB {
 
         {
             let mut stmt = tx.prepare(
-                "INSERT OR IGNORE INTO reddit_posts
+                "INSERT INTO reddit_posts
                 (timestamp, formatted_date, title, url, relevance, subreddit, permalink)
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             )?;

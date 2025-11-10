@@ -202,39 +202,22 @@ async fn get_subreddit_posts(
         .data
         .children
         .into_iter()
-        .map(|child| PostDataWrapper {
-            id: match &child.data {
-                RedditData::Post(post) => post.id.parse().unwrap_or(0),
-                _ => 0,
-            },
-            title: match &child.data {
-                RedditData::Post(post) => post.title.clone(),
-                _ => String::new(),
-            },
-            url: match &child.data {
-                RedditData::Post(post) => post.url.clone(),
-                _ => String::new(),
-            },
-            timestamp: match &child.data {
-                RedditData::Post(post) => post.created_utc as i64,
-                _ => 0,
-            },
-            formatted_date: match &child.data {
-                RedditData::Post(post) => {
-                    database::adding::DB::format_timestamp(post.created_utc as i64)
-                        .expect("Failed to format timestamp")
-                }
-                _ => String::new(),
-            },
-            relevance: relevance.to_string(),
-            subreddit: match &child.data {
-                RedditData::Post(post) => post.subreddit.clone(),
-                _ => String::new(),
-            },
-            permalink: match &child.data {
-                RedditData::Post(post) => post.permalink.clone(),
-                _ => String::new(),
-            },
+        .filter_map(|child| {
+            if let RedditData::Post(post) = &child.data {
+                Some(PostDataWrapper {
+                    id: post.id.parse().unwrap_or(0),
+                    title: post.title.clone(),
+                    url: post.url.clone(),
+                    timestamp: post.created_utc as i64,
+                    formatted_date: database::adding::DB::format_timestamp(post.created_utc as i64)
+                        .expect("Failed to format timestamp"),
+                    relevance: relevance.to_string(),
+                    subreddit: post.subreddit.clone(),
+                    permalink: format!("https://reddit.com{}", post.permalink.clone()),
+                })
+            } else {
+                None
+            }
         })
         .collect();
 
@@ -304,7 +287,7 @@ async fn search_subreddit_posts(
                         .expect("Failed to format timestamp"),
                     relevance: relevance.to_string(),
                     subreddit: post.subreddit.clone(),
-                    permalink: post.permalink.clone(),
+                    permalink: format!("https://reddit.com{}", post.permalink.clone()),
                 })
             } else {
                 None
