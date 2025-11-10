@@ -1,3 +1,4 @@
 /target
 # BLACKLIST .env
 .env
+.DS_Store
