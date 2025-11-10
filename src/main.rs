@@ -49,8 +49,6 @@ struct RedditComment {
     replies: serde_json::Value,
 }
 
-
-
 #[derive(Deserialize, Debug, Clone)]
 struct RedditListingData {
     children: Vec<RedditListingChild>,
@@ -65,10 +63,6 @@ struct RedditListingChild {
 struct RedditListing {
     data: RedditListingData,
 }
-
-
-
-
 
 // Define a custom error type for better error handling
 #[derive(Debug)]
@@ -86,6 +80,12 @@ impl From<reqwest::Error> for RedditError {
 
 pub struct AppState {
     pub data: Vec<PostDataWrapper>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AppState {
@@ -374,7 +374,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Find-Search option
     if let (Some(keyword), Some(relevance)) = (args.find, &args.relevance) {
-        let posts = search_subreddit_posts(&token, &keyword, &relevance)
+        let posts = search_subreddit_posts(&token, &keyword, relevance)
             .await
             .expect("Failed to retrieve the posts data");
         let mut db = database::adding::DB::new()?;
@@ -402,19 +402,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Command::new("open")
             .arg(&db_path)
             .spawn()
-            .expect("Failed to open database folder");
+            .expect("Failed to open database folder")
+            .wait()?;
 
         #[cfg(target_os = "windows")]
         Command::new("explorer")
             .arg(&db_path)
             .spawn()
-            .expect("Failed to open database folder");
+            .expect("Failed to open database folder")
+            .wait()?;
 
         #[cfg(target_os = "linux")]
         Command::new("xdg-open")
             .arg(&db_path)
             .spawn()
-            .expect("Failed to open database folder");
+            .expect("Failed to open database folder")
+            .wait()?;
 
         println!("Opening database folder: {:?}", db_path);
         return Ok(());

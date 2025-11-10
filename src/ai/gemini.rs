@@ -74,17 +74,10 @@ pub async fn ask_gemini(question: &str) -> Result<Value, GeminiError> {
         attempts += 1;
 
         // Create system prompt - more strict on subsequent attempts
-        let system_prompt = if attempts > 1 {
-            format!(
-                "Given the following data: {}, output the information in the best way possible to answer the questions. Be as thorough as possible and provide URLs when needed.",
-                json_reddits
-            )
-        } else {
-            format!(
-                "Given the following data: {}, output the information in the best way possible to answer the questions. Be as thorough as possible and provide URLs when needed.",
-                json_reddits
-            )
-        };
+        let system_prompt = format!(
+            "Given the following data: {}, output the information in the best way possible to answer the questions. Be as thorough as possible and provide URLs when needed.",
+            json_reddits
+        );
 
         log::debug!("Attempt {} - System prompt: {}", attempts, system_prompt);
 
@@ -95,7 +88,7 @@ pub async fn ask_gemini(question: &str) -> Result<Value, GeminiError> {
 
         // Start spinner in a separate thread
         let spinner_handle = thread::spawn(move || {
-            let spinner_chars = vec!['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+            let spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
             let mut i = 0;
 
             while running_clone.load(Ordering::Relaxed) {
@@ -282,7 +275,7 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
             });
 
             format!(
-                "You are a lead generation AI analyzing posts and comments. Analyze this data: {}\n\n                STRICT OUTPUT REQUIREMENTS:\n                1. Return ONLY a valid JSON array of objects\n                2. Each object MUST have:\n                   - formatted_date: post date (YYYY-MM-DD)\n                   - title: exact post title\n                   - url: full post URL\n                   - relevance: HIGH/MEDIUM/LOW for lead quality\n                   - subreddit: subreddit name\n                   - sentiment: detected sentiment\n                   - top_comments: array of up to 3 most relevant comments\n                   - comment_sentiment: overall comment sentiment\n                   - engagement_score: HIGH/MEDIUM/LOW based on interaction\n
+                "You are a lead generation AI analyzing posts and comments. Analyze this data: {}\n\n                STRICT OUTPUT REQUIREMENTS:\n                1. Return ONLY a valid JSON array of objects\n                2. Each object MUST have:\n                   - formatted_date: post date (YYYY-MM-DD)\n                   - title: exact post title\n                   - url: full post URL\n                   - relevance: HIGH/MEDIUM/LOW for lead quality\n                   - subreddit: subreddit name\n                   - sentiment: detected sentiment\n                   - top_comments: array of up to 3 most relevant comments, each with 'author', 'text', and 'sentiment' fields.\n                   - comment_sentiment: overall comment sentiment\n                   - engagement_score: HIGH/MEDIUM/LOW based on interaction\n
                 NO text outside JSON. NO markdown blocks.",
                 serde_json::to_string(&combined_data).unwrap_or_default()
             )
@@ -297,7 +290,7 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
 
         // Start spinner in a separate thread
         let spinner_handle = thread::spawn(move || {
-            let spinner_chars = vec!['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+            let spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
             let mut i = 0;
 
             while running_clone.load(Ordering::Relaxed) {

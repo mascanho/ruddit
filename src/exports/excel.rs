@@ -104,6 +104,7 @@ pub fn export_gemini_to_excel(json_str: &str) -> Result<(), XlsxError> {
     worksheet.write_string_with_format(0, 3, "Relevance", &header_format)?;
     worksheet.write_string_with_format(0, 4, "Subreddit", &header_format)?;
     worksheet.write_string_with_format(0, 5, "Sentiment", &header_format)?;
+    worksheet.write_string_with_format(0, 6, "Engagement Score", &header_format)?;
 
     // Write leads data
     for (row, value) in gemini_values.iter().enumerate() {
@@ -131,6 +132,9 @@ pub fn export_gemini_to_excel(json_str: &str) -> Result<(), XlsxError> {
             if let Some(sentiment) = obj.get("sentiment").and_then(|v| v.as_str()) {
                 worksheet.write_string(row, 5, sentiment)?;
             }
+            if let Some(engagement_score) = obj.get("engagement_score").and_then(|v| v.as_str()) {
+                worksheet.write_string(row, 6, engagement_score)?;
+            }
         }
     }
 
@@ -141,6 +145,7 @@ pub fn export_gemini_to_excel(json_str: &str) -> Result<(), XlsxError> {
     worksheet.set_column_width(3, 15)?; // Relevance
     worksheet.set_column_width(4, 20)?; // Subreddit
     worksheet.set_column_width(5, 15)?; // Sentiment
+    worksheet.set_column_width(6, 20)?; // Engagement Score
 
     // Add and setup comments worksheet
     worksheet = workbook.add_worksheet();
@@ -236,11 +241,11 @@ pub fn export_gemini_to_excel(json_str: &str) -> Result<(), XlsxError> {
 pub fn export_comments_from_db(post_id: &str) -> Result<(), XlsxError> {
     // Get comments from database
     let db = DB::new()
-        .map_err(|e| XlsxError::IoError(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| XlsxError::IoError(std::io::Error::other(e)))?;
 
     let comments = db
         .get_post_comments(post_id)
-        .map_err(|e| XlsxError::IoError(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| XlsxError::IoError(std::io::Error::other(e)))?;
 
     println!("Exporting {} comments to Excel", comments.len());
 
@@ -273,7 +278,7 @@ pub fn export_comments_from_db(post_id: &str) -> Result<(), XlsxError> {
         worksheet.write_string(row, 3, &comment.body)?;
         worksheet.write_number(row, 4, comment.score as f64)?;
         worksheet.write_string(row, 5, &comment.formatted_date)?;
-        worksheet.write_string(row, 6, &format!("https://reddit.com{}", comment.permalink))?;
+        worksheet.write_string(row, 6, format!("https://reddit.com{}", comment.permalink))?;
     }
 
     // Set column widths

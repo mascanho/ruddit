@@ -25,7 +25,6 @@ pub struct ApiKeys {
     pub match_keyword: String,
 }
 
-
 #[derive(Debug)]
 pub struct ConfigDirs {
     pub home_dir: String,
@@ -35,7 +34,7 @@ pub struct ConfigDirs {
     pub documents_dir: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     pub api_keys: ApiKeys,
 }
@@ -56,13 +55,6 @@ impl Default for ApiKeys {
     }
 }
 
-impl Default for AppConfig {
-    fn default() -> Self {
-        AppConfig {
-            api_keys: ApiKeys::default(),
-        }
-    }
-}
 
 
 impl ConfigDirs {
@@ -117,23 +109,22 @@ MATCH = "OR"
         Ok(())
     }
 
-   pub fn read_config() -> Result<AppConfig, Box<dyn std::error::Error>> {
-    let base_dirs = BaseDirs::new().ok_or("Failed to get base directories")?;
-    let config_dir = base_dirs.config_dir();
+    pub fn read_config() -> Result<AppConfig, Box<dyn std::error::Error>> {
+        let base_dirs = BaseDirs::new().ok_or("Failed to get base directories")?;
+        let config_dir = base_dirs.config_dir();
 
-    // Path to the config file
-    let config_path = config_dir.join("ruddit/settings.toml");
-    println!("Reading config file: {:#?}", config_path);
+        // Path to the config file
+        let config_path = config_dir.join("ruddit/settings.toml");
+        println!("Reading config file: {:#?}", config_path);
 
-    // Read from file
-    let toml_content = fs::read_to_string(config_path)?;
-    
-    // Try parsing; on failure, return the error instead of panicking
-    let app_config: AppConfig = toml::from_str(&toml_content)?;
+        // Read from file
+        let toml_content = fs::read_to_string(config_path)?;
 
-    Ok(app_config)
-}
+        // Try parsing; on failure, return the error instead of panicking
+        let app_config: AppConfig = toml::from_str(&toml_content)?;
 
+        Ok(app_config)
+    }
 
     pub fn edit_config_file() -> Result<(), Box<dyn std::error::Error>> {
         // get the config file path and edit natively.
