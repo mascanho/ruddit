@@ -153,68 +153,36 @@ pub fn export_gemini_to_excel(json_str: &str) -> Result<(), XlsxError> {
     worksheet.write_string_with_format(0, 3, "Sentiment", &header_format)?;
     worksheet.write_string_with_format(0, 4, "URL", &header_format)?;
 
-    // Write data
-    for (row, value) in gemini_values.iter().enumerate() {
-        let row = (row + 1) as u32;
+    let mut row_num = 1;
+    for value in &gemini_values {
         if let Some(obj) = value.as_object() {
-            // Cache commonly used values
             let title = obj
                 .get("title")
                 .and_then(|v| v.as_str())
                 .unwrap_or_default();
             let url = obj.get("url").and_then(|v| v.as_str()).unwrap_or_default();
 
-            // Write to leads sheet
-            worksheet.write_string(row, 0, title)?;
-            worksheet.write_string(row, 1, url)?;
-
-            if let Some(date) = obj.get("formatted_date").and_then(|v| v.as_str()) {
-                worksheet.write_string(row, 2, date)?;
-            }
-            if let Some(relevance) = obj.get("relevance").and_then(|v| v.as_str()) {
-                worksheet.write_string(row, 3, relevance)?;
-            }
-            if let Some(subreddit) = obj.get("subreddit").and_then(|v| v.as_str()) {
-                worksheet.write_string(row, 4, subreddit)?;
-            }
-            if let Some(sentiment) = obj.get("sentiment").and_then(|v| v.as_str()) {
-                worksheet.write_string(row, 5, sentiment)?;
-            }
-
-            // Write comments if they exist
             if let Some(comments) = obj.get("top_comments").and_then(|v| v.as_array()) {
-                for (comment_idx, comment) in comments.iter().enumerate() {
+                for comment in comments {
                     if let Some(comment_obj) = comment.as_object() {
-                        let comment_row = row + comment_idx as u32;
-
-                        worksheet.write_string(comment_row, 0, title)?;
-
+                        worksheet.write_string(row_num, 0, title)?;
                         if let Some(author) = comment_obj.get("author").and_then(|v| v.as_str()) {
-                            worksheet.write_string(comment_row, 1, author)?;
+                            worksheet.write_string(row_num, 1, author)?;
                         }
                         if let Some(text) = comment_obj.get("text").and_then(|v| v.as_str()) {
-                            worksheet.write_string(comment_row, 2, text)?;
+                            worksheet.write_string(row_num, 2, text)?;
                         }
                         if let Some(sentiment) =
                             comment_obj.get("sentiment").and_then(|v| v.as_str())
                         {
-                            worksheet.write_string(comment_row, 3, sentiment)?;
+                            worksheet.write_string(row_num, 3, sentiment)?;
                         }
-                        worksheet.write_string(comment_row, 4, url)?;
+                        worksheet.write_string(row_num, 4, url)?;
+                        row_num += 1;
                     }
                 }
             }
         }
-    }
-
-    {
-        // Set column widths for leads sheet
-        worksheet.set_column_width(0, 50)?; // Title
-        worksheet.set_column_width(1, 30)?; // URL
-        worksheet.set_column_width(2, 20)?; // Date
-        worksheet.set_column_width(3, 15)?; // Relevance
-        worksheet.set_column_width(4, 20)?; // Subreddit
-        worksheet.set_column_width(5, 15)?; // Sentiment
     }
 
     {
@@ -358,4 +326,114 @@ pub fn export_comments_from_db(post_id: &str) -> Result<(), XlsxError> {
 // Function to export the leads that are generated from the LLM
 pub async fn export_leads_with_gemini(data: &str) -> Result<(), XlsxError> {
     export_gemini_to_excel(data)
+}
+
+// Function to export the comments that are generated from the LLM
+pub async fn export_comments_with_gemini(data: &str) -> Result<(), XlsxError> {
+    let json_data: Value = serde_json::from_str(data).unwrap();
+
+    let mut workbook = Workbook::new();
+    let mut worksheet = workbook.add_worksheet();
+    worksheet.set_name("Comments")?;
+
+    let header_format = Format::new()
+        .set_bold()
+        .set_align(FormatAlign::Center)
+        .set_background_color("C6EFCE");
+
+    worksheet.write_string_with_format(0, 0, "Post Title", &header_format)?;
+    worksheet.write_string_with_format(0, 1, "Author", &header_format)?;
+    worksheet.write_string_with_format(0, 2, "Comment", &header_format)?;
+    worksheet.write_string_with_format(0, 3, "Sentiment", &header_format)?;
+    worksheet.write_string_with_format(0, 4, "URL", &header_format)?;
+
+    let mut row = 1;
+    if let Some(posts) = json_data.as_array() {
+        for post in posts {
+            if let Some(post_obj) = post.as_object() {
+                let title = post_obj
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                let url = post_obj
+                    .get("url")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+
+                if let Some(comments) = post_obj.get("top_comments").and_then(|v| v.as_array()) {
+                    for comment in comments {
+                        if let Some(comment_obj) = comment.as_object() {
+                            worksheet.write_string(row, 0, title)?;
+                            worksheet.write_string(
+                                row,
+                                1,
+                                comment_obj
+                                    .get("author")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or_default(),
+                            )?;
+                            worksheet.write_string(
+                                row,
+                                2,
+                                comment_obj
+                                    .get("text")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or_default(),
+                            )?;
+                            worksheet.write_string(
+                                row,
+                                3,
+                                comment_obj
+                                    .get("sentiment")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or_default(),
+                            )?;
+                            worksheet.write_string(row, 4, url)?;
+                            row += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    worksheet.set_column_width(0, 50)?;
+    worksheet.set_column_width(1, 20)?;
+    worksheet.set_column_width(2, 100)?;
+    worksheet.set_column_width(3, 15)?;
+    worksheet.set_column_width(4, 30)?;
+
+    let user_dirs = UserDirs::new().ok_or_else(|| {
+        XlsxError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Failed to get user directories",
+        ))
+    })?;
+
+    let desktop = user_dirs.desktop_dir().ok_or_else(|| {
+        XlsxError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Failed to get desktop directory",
+        ))
+    })?;
+
+    let folder_name = "Reddit_data";
+    let filename = format!(
+        "Ruddit_comments_{}.xlsx",
+        Local::now().format("%d-%m-%Y_%H-%M-%S")
+    );
+
+    let folder_path = desktop.join(folder_name);
+    if let Err(e) = fs::create_dir_all(&folder_path) {
+        eprintln!("Failed to create directory {:?}: {}", folder_path, e);
+        return Err(XlsxError::IoError(e));
+    }
+
+    let save_path = folder_path.join(&filename);
+    workbook.save(&save_path).map_err(|e| {
+        eprintln!("Failed to save workbook to {:?}: {}", save_path, e);
+        e
+    })?;
+    println!("Successfully exported to {:?}", save_path);
+    Ok(())
 }
