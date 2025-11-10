@@ -10,6 +10,7 @@ use crate::{
     database::adding::{CommentDataWrapper, PostDataWrapper},
     settings::api_keys::{self, AppConfig},
 };
+use std::process::Command;
 
 pub mod actions;
 pub mod ai;
@@ -440,6 +441,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Run it before all the other logic
     if args.settings {
         settings::api_keys::ConfigDirs::edit_config_file().unwrap();
+    }
+
+    // Open database folder if requested
+    if args.open_db {
+        let base_dirs = directories::BaseDirs::new().expect("Failed to get base directories");
+        let db_path = base_dirs.config_dir().join("ruddit");
+
+        #[cfg(target_os = "macos")]
+        Command::new("open")
+            .arg(&db_path)
+            .spawn()
+            .expect("Failed to open database folder");
+
+        #[cfg(target_os = "windows")]
+        Command::new("explorer")
+            .arg(&db_path)
+            .spawn()
+            .expect("Failed to open database folder");
+
+        #[cfg(target_os = "linux")]
+        Command::new("xdg-open")
+            .arg(&db_path)
+            .spawn()
+            .expect("Failed to open database folder");
+
+        println!("Opening database folder: {:?}", db_path);
+        return Ok(());
     }
 
     // Query GEMINI

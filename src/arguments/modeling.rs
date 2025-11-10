@@ -8,7 +8,11 @@ use clap::Parser;
 #[command(about = "Ruddit - A lead finder for Reddit built with Rust", long_about = None)]
 #[command(version, about, long_about = None)]
 pub struct Args {
-    /// Gemini model key (-g)
+    /// Open database folder
+    #[arg(short = 'O', long, help = "Open the folder containing the database")]
+    pub open_db: bool,
+
+    /// Gemini model key
     #[arg(short, long, help = "Query Gemini to discover insights in your data")]
     pub gemini: Option<String>,
 
