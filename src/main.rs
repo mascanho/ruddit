@@ -1,13 +1,13 @@
 use base64::{Engine as _, engine::general_purpose};
-use chrono::{Duration, Utc};
+use chrono::NaiveDateTime;
 use clap::Parser;
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::env::{self};
 
 use crate::{
     arguments::modeling::Args,
-    database::adding::PostDataWrapper,
+    database::adding::{CommentDataWrapper, PostDataWrapper},
     settings::api_keys::{self, AppConfig},
 };
 
@@ -25,7 +25,44 @@ struct RedditPost {
     url: String,
     created_utc: f64,
     subreddit: String,
-    // Add other fields you need
+    permalink: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct RedditComment {
+    id: Option<String>,
+    body: Option<String>,
+    author: Option<String>,
+    created_utc: Option<f64>,
+    score: Option<i32>,
+    permalink: Option<String>,
+    parent_id: Option<String>,
+    #[serde(default)]
+    replies: serde_json::Value,
+}
+
+// Custom serialization for handling empty string or CommentListing
+mod reply_format {
+    use super::*;
+    use serde::{Deserialize, Deserializer};
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<CommentListing>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum StringOrListing {
+            String(String),
+            Listing(CommentListing),
+        }
+
+        match StringOrListing::deserialize(deserializer) {
+            Ok(StringOrListing::String(_)) => Ok(None),
+            Ok(StringOrListing::Listing(listing)) => Ok(Some(listing)),
+            Err(_) => Ok(None),
+        }
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -45,6 +82,23 @@ struct RedditListingChild {
 struct RedditListing {
     kind: String,
     data: RedditListingData,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct CommentListing {
+    kind: String,
+    data: CommentListingData,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct CommentListingData {
+    children: Vec<CommentListingChild>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct CommentListingChild {
+    kind: String,
+    data: RedditComment,
 }
 
 #[derive(Deserialize, Debug)]
@@ -149,6 +203,7 @@ async fn get_subreddit_posts(
                 .expect("Failed to format timestamp"),
             relevance: relevance.to_string(),
             subreddit: child.data.subreddit,
+            permalink: child.data.permalink,
         })
         .collect();
 
@@ -157,6 +212,58 @@ async fn get_subreddit_posts(
     }
 
     Ok(posts)
+}
+
+async fn get_post_comments(
+    access_token: &str,
+    post_id: &str,
+) -> Result<Vec<RedditComment>, RedditError> {
+    let client = Client::new();
+    let url = format!("https://oauth.reddit.com/comments/{}", post_id);
+
+    let response = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", access_token))
+        .header("User-Agent", "RustRedditApp/0.1 by YourUsername")
+        .send()
+        .await?;
+
+    let response_text = response.text().await?;
+
+    let listings = match serde_json::from_str::<Vec<CommentListing>>(&response_text) {
+        Ok(parsed) => {
+            if let Ok(pretty) = serde_json::to_string_pretty(&parsed) {
+                println!("\nSuccessfully parsed response:\n{}\n", pretty);
+            }
+            parsed
+        }
+        Err(e) => {
+            println!("\nError parsing response: {}", e);
+            println!("\nRaw response:\n{}", &response_text);
+            return Err(RedditError::TokenExtraction);
+        }
+    };
+
+    // The comments are in the second listing (index 1)
+    if listings.len() > 1 {
+        let comments = listings[1]
+            .data
+            .children
+            .iter()
+            .filter_map(|child| {
+                let comment = child.data.clone();
+                if comment.id.is_some() {
+                    Some(comment)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        Ok(comments)
+    } else {
+        Ok(Vec::new())
+    }
 }
 
 async fn search_subreddit_posts(
@@ -192,6 +299,7 @@ async fn search_subreddit_posts(
                 .expect("Failed to format timestamp"),
             relevance: relevance.to_string(),
             subreddit: child.data.subreddit,
+            permalink: child.data.permalink,
         })
         .collect();
 
@@ -237,6 +345,57 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // initiate clap / args
     let args = Args::parse();
+
+    // Handle comment fetching
+    if let Some(post_id) = args.comments {
+        println!("Fetching comments for post {}...", post_id);
+
+        let comments = get_post_comments(&token, &post_id)
+            .await
+            .expect("Failed to retrieve comments");
+
+        // Convert to CommentDataWrapper
+        let comment_wrappers: Vec<CommentDataWrapper> = comments
+            .into_iter()
+            .take(args.comment_limit)
+            .map(|comment| CommentDataWrapper {
+                id: comment.id.unwrap_or_default(),
+                post_id: post_id.clone(),
+                body: comment.body.unwrap_or_default(),
+                author: comment.author.unwrap_or_default(),
+                timestamp: comment.created_utc.unwrap_or_default() as i64,
+                formatted_date: database::adding::DB::format_timestamp(
+                    comment.created_utc.unwrap_or_default() as i64,
+                )
+                .expect("Failed to format timestamp"),
+                score: comment.score.unwrap_or_default(),
+                permalink: comment.permalink.unwrap_or_default(),
+                parent_id: comment.parent_id.unwrap_or_default(),
+            })
+            .collect();
+
+        println!("\nFound {} comments", comment_wrappers.len());
+
+        // Print comments in a readable format
+        for (i, comment) in comment_wrappers.iter().enumerate() {
+            println!("\nComment #{}", i + 1);
+            println!("Author: u/{}", comment.author);
+            println!("Score: {} points", comment.score);
+            println!("Posted: {}", comment.formatted_date);
+            println!("Link: https://reddit.com{}", comment.permalink);
+            println!("\nContent:");
+            println!("{}\n", comment.body.replace("\\n", "\n").trim());
+            println!("{}", "-".repeat(80));
+        }
+
+        // Save to database
+        let mut db = database::adding::DB::new()?;
+        db.create_comments_table()?;
+        db.append_comments(&comment_wrappers)?;
+
+        println!("\nComments saved to database!");
+        return Ok(());
+    }
 
     // Find-Search option
     if let (Some(keyword), Some(relevance)) = (args.find, &args.relevance) {
@@ -290,11 +449,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 subreddit, relevance
             );
 
-            // NOTE: Improve the search option to search subreddits using clap
-            // let _search_posts = search_subreddit_posts(&token, &subreddit)
-            //     .await
-            //     .expect("Failed to retrieve the posts data");
-
             let posts = get_subreddit_posts(&token, &subreddit, &relevance)
                 .await
                 .expect("Failed to retrieve the posts data");
@@ -308,8 +462,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             println!("No subreddit or relevance specified. Use --help for usage info.");
         }
-
-        // Get the leads and print them
     } else if args.leads {
         let leads = ai::gemini::gemini_generate_leads()
             .await
