@@ -62,7 +62,7 @@ pub async fn ask_gemini(question: &str) -> Result<Value, GeminiError> {
     let api_key = settings::api_keys::ConfigDirs::read_config()
         .map_err(|e| GeminiError::ConfigError(e.to_string()))?
         .api_keys
-        .GEMINI_API_KEY;
+        .gemini_api_key;
 
     let client = Gemini::new(api_key);
 
@@ -182,7 +182,7 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
     let settings = settings::api_keys::ConfigDirs::read_config()
         .map_err(|e| GeminiError::ConfigError(e.to_string()))?;
 
-    let question_vec = settings.api_keys.LEAD_KEYWORDS;
+    let question_vec = settings.api_keys.lead_keywords;
     if question_vec.is_empty() {
         return Err(GeminiError::ConfigError(
             "No lead keywords found in configuration file. Add default Keywords to match with reddit data and export leads".to_string(),
@@ -216,23 +216,25 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
     }
 
     // Get sentiment requirements
-    let sentiments = settings.api_keys.SENTIMENT.join(" OR ");
-    let match_type = settings.api_keys.MATCH.to_lowercase();
+    let sentiments = settings.api_keys.sentiment.join(" OR ");
+    let match_type = settings.api_keys.match_keyword.to_lowercase();
     let match_operator = if match_type == "and" { "AND" } else { "OR" };
 
     let question = format!(
-        "Analyze the following posts and return ONLY those that match these criteria:
-        1. Keywords ({}) must be found in the title using {} matching
-        2. The post sentiment should match one of: {}
+        "Analyze the following posts and their comments, and return ONLY those that match these criteria:
+        1. Keywords ({}) must be found in the post's title OR in the comments, using {} matching.
+        2. The post's sentiment OR the overall sentiment of its comments should match one of: {}.
         3. Return ONLY posts that are likely to be leads or business opportunities.
 
-        Format each result as a JSON object with fields:
+        For each matching post, format the result as a JSON object with these fields:
         - title: the post title
         - url: the post URL
         - formatted_date: the post date
         - relevance: HIGH if it's a strong lead, MEDIUM if potential, LOW if uncertain
         - subreddit: the subreddit name
-        - sentiment: the detected sentiment
+        - sentiment: the detected sentiment of the post
+        - top_comments: an array of up to 3 most relevant comments that match the criteria
+        - comment_sentiment: the overall sentiment of the matching comments
         ",
         keywords, match_operator, sentiments
     );
@@ -255,7 +257,7 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
     let api_key = settings::api_keys::ConfigDirs::read_config()
         .map_err(|e| GeminiError::ConfigError(e.to_string()))?
         .api_keys
-        .GEMINI_API_KEY;
+        .gemini_api_key;
 
     let client = Gemini::new(api_key);
 
@@ -270,24 +272,7 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
 
         let system_prompt = if attempts > 1 {
             format!(
-                "You are a lead generation AI. Analyze the following data strictly: {}
-
-        REQUIREMENTS:
-        1. Return ONLY a valid JSON array of objects
-        2. Each object MUST have these fields:
-           - formatted_date: post date (YYYY-MM-DD)
-           - title: exact post title
-           - url: full post URL
-           - relevance: HIGH, MEDIUM, or LOW based on lead quality
-           - subreddit: subreddit name
-           - sentiment: detected sentiment (positive, negative, neutral)
-           - engagement_score: HIGH/MEDIUM/LOW
-
-        Follow these rules:
-        - Use proper JSON format with double quotes
-        - No text outside the JSON
-        - No markdown code blocks
-        - ONLY include posts matching the query criteria",
+                "You are a lead generation AI. Analyze the following data strictly: {}\n\n        REQUIREMENTS:\n        1. Return ONLY a valid JSON array of objects\n        2. Each object MUST have these fields:\n           - formatted_date: post date (YYYY-MM-DD)\n           - title: exact post title\n           - url: full post URL\n           - relevance: HIGH, MEDIUM, or LOW based on lead quality\n           - subreddit: subreddit name\n           - sentiment: detected sentiment (positive, negative, neutral)\n           - engagement_score: HIGH/MEDIUM/LOW\n\n        Follow these rules:\n        - Use proper JSON format with double quotes\n        - No text outside the JSON\n        - No markdown code blocks\n        - ONLY include posts matching the query criteria",
                 json_reddits
             )
         } else {
@@ -297,21 +282,7 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
             });
 
             format!(
-                "You are a lead generation AI analyzing posts and comments. Analyze this data: {}
-
-                STRICT OUTPUT REQUIREMENTS:
-                1. Return ONLY a valid JSON array of objects
-                2. Each object MUST have:
-                   - formatted_date: post date (YYYY-MM-DD)
-                   - title: exact post title
-                   - url: full post URL
-                   - relevance: HIGH/MEDIUM/LOW for lead quality
-                   - subreddit: subreddit name
-                   - sentiment: detected sentiment
-                   - top_comments: array of up to 3 most relevant comments
-                   - comment_sentiment: overall comment sentiment
-                   - engagement_score: HIGH/MEDIUM/LOW based on interaction
-
+                "You are a lead generation AI analyzing posts and comments. Analyze this data: {}\n\n                STRICT OUTPUT REQUIREMENTS:\n                1. Return ONLY a valid JSON array of objects\n                2. Each object MUST have:\n                   - formatted_date: post date (YYYY-MM-DD)\n                   - title: exact post title\n                   - url: full post URL\n                   - relevance: HIGH/MEDIUM/LOW for lead quality\n                   - subreddit: subreddit name\n                   - sentiment: detected sentiment\n                   - top_comments: array of up to 3 most relevant comments\n                   - comment_sentiment: overall comment sentiment\n                   - engagement_score: HIGH/MEDIUM/LOW based on interaction\n
                 NO text outside JSON. NO markdown blocks.",
                 serde_json::to_string(&combined_data).unwrap_or_default()
             )

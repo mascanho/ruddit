@@ -49,79 +49,30 @@ struct RedditComment {
     replies: serde_json::Value,
 }
 
-// Custom serialization for handling empty string or CommentListing
-mod reply_format {
-    use super::*;
-    use serde::{Deserialize, Deserializer};
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<CommentListing>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum StringOrListing {
-            String(String),
-            Listing(CommentListing),
-        }
-
-        match StringOrListing::deserialize(deserializer) {
-            Ok(StringOrListing::String(_)) => Ok(None),
-            Ok(StringOrListing::Listing(listing)) => Ok(Some(listing)),
-            Err(_) => Ok(None),
-        }
-    }
-}
 
 #[derive(Deserialize, Debug, Clone)]
 struct RedditListingData {
     children: Vec<RedditListingChild>,
-    after: Option<String>,
-    before: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 struct RedditListingChild {
-    kind: String,
     data: RedditData,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 struct RedditListing {
-    kind: String,
     data: RedditListingData,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct CommentListing {
-    kind: String,
-    data: CommentListingData,
-}
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct CommentListingData {
-    children: Vec<CommentListingChild>,
-}
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct CommentListingChild {
-    kind: String,
-    data: RedditComment,
-}
 
-#[derive(Deserialize, Debug)]
-struct ListingData {
-    children: Vec<PostDataWrapper>,
-}
-
-#[derive(Deserialize, Debug)]
-struct PostData {
-    title: String,
-    url: String,
-}
 
 // Define a custom error type for better error handling
 #[derive(Debug)]
+#[allow(dead_code)]
 enum RedditError {
     Reqwest(reqwest::Error),
     TokenExtraction,
@@ -141,13 +92,13 @@ impl AppState {
     pub fn new() -> Self {
         // Initialize database connection
         let db = database::adding::DB::new()
-            .map_err(|e| RedditError::TokenExtraction)
+            .map_err(|_e| RedditError::TokenExtraction)
             .unwrap();
 
         // Get data from database
         let reddits = db
             .get_db_results()
-            .map_err(|e| RedditError::TokenExtraction)
+            .map_err(|_e| RedditError::TokenExtraction)
             .unwrap();
 
         let vec = reddits;
@@ -314,8 +265,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let api_keys = config.api_keys;
-    let client_id = api_keys.REDDIT_API_ID;
-    let client_secret = api_keys.REDDIT_API_SECRET;
+    let client_id = api_keys.reddit_api_id;
+    let client_secret = api_keys.reddit_api_secret;
 
     // If the user has not set the API keys and app config, prompt them to do so
     let token = match get_access_token(client_id, client_secret).await {
@@ -520,7 +471,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             for post in &posts {
                 if let Ok(post_comments) = get_post_comments(&token, &post.id.to_string()).await {
                     if let Some(post_data) = post_comments.first() {
-                        if let RedditData::Post(post_info) = &post_data.data.children[0].data {
+                        if let RedditData::Post(_post_info) = &post_data.data.children[0].data {
                             let comments = post_comments[1]
                                 .data
                                 .children
