@@ -80,9 +80,21 @@ pub fn create_excel() -> Result<(), Box<dyn std::error::Error>> {
 
 // Export the filtered data by the LLM into a .xlsx
 pub fn export_gemini_to_excel(json_str: &str) -> Result<(), XlsxError> {
-    let gemini_values: Vec<Value> = serde_json::from_str(json_str)
-        .or_else(|_| serde_json::from_str(json_str).map(|v: Value| vec![v]))
-        .expect("Failed to parse JSON as an array or a single object");
+    let gemini_values: Vec<Value> = match serde_json::from_str(json_str) {
+        Ok(arr) => arr,
+        Err(_) => {
+            match serde_json::from_str::<Value>(json_str) {
+                Ok(obj) => vec![obj],
+                Err(e) => {
+                    eprintln!("Warning: Failed to parse JSON, using empty data. Error: {}", e);
+                    eprintln!("JSON content (first 1000 chars): {}", &json_str[..json_str.len().min(1000)]);
+                    Vec::new() // Return empty vector instead of failing
+                }
+            }
+        }
+    };
+
+    println!("Processing {} items from JSON", gemini_values.len());
 
     // Create workbook
     let mut workbook = Workbook::new();
@@ -335,7 +347,14 @@ pub async fn export_leads_with_gemini(data: &str) -> Result<(), XlsxError> {
 
 // Function to export the comments that are generated from the LLM
 pub async fn export_comments_with_gemini(data: &str) -> Result<(), XlsxError> {
-    let json_data: Value = serde_json::from_str(data).unwrap();
+    let json_data: Value = match serde_json::from_str(data) {
+        Ok(value) => value,
+        Err(e) => {
+            eprintln!("Warning: Failed to parse JSON in export_comments_with_gemini, using empty object. Error: {}", e);
+            eprintln!("JSON content (first 1000 chars): {}", &data[..data.len().min(1000)]);
+            Value::Null
+        }
+    };
 
     let mut workbook = Workbook::new();
     let worksheet = workbook.add_worksheet();

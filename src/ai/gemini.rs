@@ -217,7 +217,7 @@ pub async fn gemini_generate_leads() -> Result<(), GeminiError> {
         "Analyze the following posts and their comments, and return ONLY those that match these criteria:
         1. Keywords ({}) must be found in the post's title OR in the comments, using {} matching.
         2. The post's sentiment OR the overall sentiment of its comments should match one of: {}.
-        3. Return ONLY posts that are likely to be leads or business opportunities.
+        3. Return ONLY posts that are likely to be leads or business opportunities for inventory management.
 
         For each matching post, format the result as a JSON object with these fields:
         - title: the post title
